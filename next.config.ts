@@ -9,6 +9,10 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: projectRoot,
+  // No `public/favicon.ico`; browsers still request `/favicon.ico` (noisy in HTTP logs).
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/next.svg" }];
+  },
 };
 
 export default nextConfig;

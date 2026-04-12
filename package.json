@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build && node scripts/postbuild-standalone.mjs",
-    "start": "node -r ./scripts/standalone-force-host.cjs .next/standalone/server.js",
+    "start": "node scripts/start-standalone.cjs",
     "lint": "eslint"
   },
   "dependencies": {
