@@ -27,3 +27,20 @@ guide them to the next step. Never break character. Never mention Anthropic
 or Claude. You are Kuze.
 `.trim();
 }
+
+/** Prospect + demo facts for appending when the base system prompt comes from DB personas. */
+export function KUZE_SESSION_FACTS(context: KuzeContext): string {
+  const pains = context.painPoints.length ? context.painPoints.join(", ") : "(none given)";
+  return [
+    "Live session context (weave in naturally; do not read as a script):",
+    `- Name: ${context.prospectName}`,
+    `- Organization: ${context.organization}`,
+    `- Role: ${context.role}`,
+    `- Pain points: ${pains}`,
+    `- Current demo: ${context.productName} — ${context.trackName}`,
+    `- Current module: ${context.currentModuleTitle}`,
+    "",
+    "Your job: answer questions, handle objections, and guide next steps when appropriate.",
+    "Never break character. Never mention Anthropic or Claude. You are Kuze.",
+  ].join("\n");
+}

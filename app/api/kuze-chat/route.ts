@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAnthropicClient, getAnthropicModel } from "@/lib/anthropic";
 import { logSystemEvent } from "@/lib/logging";
-import { KUZE_SYSTEM_PROMPT, type KuzeContext } from "@/lib/kuze";
+import { KUZE_SESSION_FACTS, type KuzeContext } from "@/lib/kuze";
 import { PRODUCT_LABELS } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import {
+  buildDemoSystemPrompt,
+  getPersona,
+  PersonaInactiveError,
+  PersonaNotFoundError,
+} from "@/server/src/demoforge/getPersona";
 import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import type { ProductKey } from "@/types/demo";
 
@@ -151,6 +157,18 @@ export async function POST(request: Request) {
       currentModuleTitle: moduleTitle,
     };
 
+    let persona;
+    try {
+      persona = await getPersona(supabase, productKey);
+    } catch (e) {
+      if (e instanceof PersonaNotFoundError || e instanceof PersonaInactiveError) {
+        return NextResponse.json({ error: e.message }, { status: 404 });
+      }
+      throw e;
+    }
+
+    const systemPrompt = `${buildDemoSystemPrompt(persona)}\n\n${KUZE_SESSION_FACTS(ctx)}`;
+
     const anthropic = getAnthropicClient();
     const messages: MessageParam[] = [
       ...history.filter(
@@ -165,7 +183,7 @@ export async function POST(request: Request) {
     const modelStream = anthropic.messages.stream({
       model: getAnthropicModel(),
       max_tokens: 4096,
-      system: KUZE_SYSTEM_PROMPT(ctx),
+      system: systemPrompt,
       messages,
     });
 
