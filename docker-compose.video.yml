@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: services/video-pipeline/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      NEXT_PUBLIC_APP_URL: http://host.docker.internal:3000
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      VIDEO_WORKER_CONCURRENCY: 2
+      CRUCIBLE_SIM_BASE_URL: ${CRUCIBLE_SIM_BASE_URL}
+      CRUCIBLE_SIM_PROFILE_PATH: ${CRUCIBLE_SIM_PROFILE_PATH}
+      CRUCIBLE_SIM_API_KEY: ${CRUCIBLE_SIM_API_KEY}
+    depends_on:
+      - redis

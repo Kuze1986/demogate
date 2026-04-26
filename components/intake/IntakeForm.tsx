@@ -62,6 +62,18 @@ export function IntakeForm() {
     return false;
   }
 
+  function handleBack() {
+    if (step > 1) {
+      setStep((s) => Math.max(1, s - 1));
+      return;
+    }
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
+  }
+
   async function submit() {
     setError(null);
     setLoading(true);
@@ -241,11 +253,7 @@ export function IntakeForm() {
       )}
 
       <div className="mt-8 flex justify-between gap-2">
-        <Button
-          variant="secondary"
-          disabled={step === 1}
-          onClick={() => setStep((s) => Math.max(1, s - 1))}
-        >
+        <Button variant="secondary" onClick={handleBack}>
           Back
         </Button>
         {step < STEPS ? (

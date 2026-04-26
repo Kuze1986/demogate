@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  initialGraphNodeId,
+  moduleIdForNode,
+  pickNextNodeId,
+} from "@/lib/journey/resolveNext";
 import type { DemoModuleRow } from "@/types/demo";
+import type { JourneyEdgeRow, JourneyNodeRow } from "@/types/journey";
 import { Card } from "@/components/ui/Card";
 import { LiveKuzeButton } from "./LiveKuzeButton";
 import { KuzeNarration } from "./KuzeNarration";
@@ -15,23 +21,35 @@ interface InitialSession {
   current_module_id: string | null;
 }
 
+export interface DemoJourneyGraph {
+  entryNodeId: string | null;
+  nodes: JourneyNodeRow[];
+  edges: JourneyEdgeRow[];
+}
+
 export function DemoPlayer({
   sessionId,
   token,
   trackName,
   modules,
   initialSession,
+  journey,
 }: {
   sessionId: string;
   token: string;
   trackName: string;
   modules: DemoModuleRow[];
   initialSession: InitialSession;
+  journey?: DemoJourneyGraph | null;
 }) {
   const router = useRouter();
   const ordered = useMemo(
     () => [...modules].sort((a, b) => a.sequence_order - b.sequence_order),
     [modules]
+  );
+
+  const graphMode = Boolean(
+    journey?.entryNodeId && journey.nodes?.length && journey.edges
   );
 
   const startIndex = useMemo(() => {
@@ -43,13 +61,38 @@ export function DemoPlayer({
   }, [ordered, initialSession.current_module_id]);
 
   const [index, setIndex] = useState(startIndex);
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(() => {
+    if (!graphMode || !journey) return null;
+    return initialGraphNodeId({
+      entryNodeId: journey.entryNodeId,
+      nodes: journey.nodes,
+      currentModuleId: initialSession.current_module_id,
+    });
+  });
   const [completedCount, setCompletedCount] = useState(
     initialSession.modules_completed ?? 0
   );
   const [showNarration, setShowNarration] = useState(false);
-  const startedRef = useRef(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [branchDecisionMeta, setBranchDecisionMeta] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const lastStartedModuleRef = useRef<string | null>(null);
 
-  const current = ordered[index];
+  const current = useMemo(() => {
+    if (graphMode && journey) {
+      if (!currentNodeId) return null;
+      const moduleId = moduleIdForNode(journey.nodes, currentNodeId);
+      if (moduleId) {
+        const mod = ordered.find((m) => m.id === moduleId);
+        if (mod) return mod;
+      }
+      return null;
+    }
+    return ordered[index];
+  }, [graphMode, journey, currentNodeId, ordered, index]);
+
   const total = ordered.length;
 
   const trackEvent = useCallback(
@@ -77,12 +120,17 @@ export function DemoPlayer({
   );
 
   useEffect(() => {
-    if (!current || startedRef.current) return;
-    startedRef.current = true;
+    if (!current) return;
+    if (lastStartedModuleRef.current === current.id) return;
+    lastStartedModuleRef.current = current.id;
     void trackEvent({
       moduleId: current.id,
       eventType: "module_start",
-    }).catch(console.error);
+    }).catch((err: unknown) => {
+      const message =
+        err instanceof Error ? err.message : "Failed to start module tracking.";
+      setActionError(message);
+    });
   }, [current, trackEvent]);
 
   const finishDemo = useCallback(() => {
@@ -91,7 +139,7 @@ export function DemoPlayer({
     );
   }, [router, sessionId, token]);
 
-  const advanceAfter = useCallback(
+  const advanceLinear = useCallback(
     async (nextIdx: number) => {
       if (nextIdx >= ordered.length) return;
       const next = ordered[nextIdx];
@@ -104,8 +152,52 @@ export function DemoPlayer({
     [ordered, trackEvent]
   );
 
+  const advanceGraph = useCallback(
+    async (
+      fromNodeId: string,
+      fromModuleId: string,
+      decisionMeta: Record<string, unknown> | null
+    ) => {
+      if (!journey) return;
+      const nextNodeId = pickNextNodeId({
+        edges: journey.edges,
+        currentNodeId: fromNodeId,
+        decisionMetadata: decisionMeta,
+      });
+      await trackEvent({
+        moduleId: fromModuleId,
+        eventType: "journey_branch_decision",
+        metadata: {
+          from_node_id: fromNodeId,
+          to_node_id: nextNodeId,
+          decision: decisionMeta,
+        },
+      });
+      if (!nextNodeId) {
+        await trackEvent({
+          moduleId: fromModuleId,
+          eventType: "demo_complete",
+        });
+        finishDemo();
+        return;
+      }
+      const nextModuleId = moduleIdForNode(journey.nodes, nextNodeId);
+      if (!nextModuleId) {
+        setActionError("Journey graph has a node without a module mapping.");
+        return;
+      }
+      await trackEvent({
+        moduleId: nextModuleId,
+        eventType: "module_start",
+      });
+      setCurrentNodeId(nextNodeId);
+    },
+    [finishDemo, journey, trackEvent]
+  );
+
   const handleComplete = useCallback(async () => {
     if (!current) return;
+    setActionError(null);
     await trackEvent({
       moduleId: current.id,
       eventType: "module_complete",
@@ -114,6 +206,14 @@ export function DemoPlayer({
       },
     });
     setCompletedCount((c) => c + 1);
+
+    if (graphMode && journey && currentNodeId) {
+      const meta = branchDecisionMeta;
+      setBranchDecisionMeta(null);
+      await advanceGraph(currentNodeId, current.id, meta);
+      return;
+    }
+
     const isLast = index >= ordered.length - 1;
     if (isLast) {
       await trackEvent({
@@ -123,15 +223,35 @@ export function DemoPlayer({
       finishDemo();
       return;
     }
-    await advanceAfter(index + 1);
-  }, [advanceAfter, current, finishDemo, index, ordered.length, trackEvent]);
+    await advanceLinear(index + 1);
+  }, [
+    advanceGraph,
+    advanceLinear,
+    branchDecisionMeta,
+    current,
+    currentNodeId,
+    finishDemo,
+    graphMode,
+    index,
+    journey,
+    ordered.length,
+    trackEvent,
+  ]);
 
   const handleSkip = useCallback(async () => {
     if (!current) return;
+    setActionError(null);
     await trackEvent({
       moduleId: current.id,
       eventType: "module_skip",
     });
+
+    if (graphMode && journey && currentNodeId) {
+      setBranchDecisionMeta(null);
+      await advanceGraph(currentNodeId, current.id, null);
+      return;
+    }
+
     const isLast = index >= ordered.length - 1;
     if (isLast) {
       await trackEvent({
@@ -141,12 +261,29 @@ export function DemoPlayer({
       finishDemo();
       return;
     }
-    await advanceAfter(index + 1);
-  }, [advanceAfter, current, finishDemo, index, ordered.length, trackEvent]);
+    await advanceLinear(index + 1);
+  }, [
+    advanceGraph,
+    advanceLinear,
+    current,
+    currentNodeId,
+    finishDemo,
+    graphMode,
+    index,
+    journey,
+    ordered.length,
+    trackEvent,
+  ]);
 
   const handleCta = useCallback(
     async (metadata?: Record<string, unknown>) => {
       if (!current) return;
+      setActionError(null);
+      if (metadata && Object.keys(metadata).length > 0) {
+        setBranchDecisionMeta(metadata);
+      } else {
+        setBranchDecisionMeta(null);
+      }
       await trackEvent({
         moduleId: current.id,
         eventType: "cta_click",
@@ -167,8 +304,9 @@ export function DemoPlayer({
     return (
       <Card>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          No modules are configured for this track yet. Ask your admin to add
-          modules in the dashboard.
+          {graphMode
+            ? "This track is in journey mode but the entry node or module mapping is missing. Ask an admin to configure the journey graph."
+            : "No modules are configured for this track yet. Ask your admin to add modules in the dashboard."}
         </p>
       </Card>
     );
@@ -182,6 +320,11 @@ export function DemoPlayer({
             {trackName}
           </p>
           <h1 className="text-2xl font-semibold">Interactive demo</h1>
+          {graphMode && (
+            <p className="mt-1 text-xs text-zinc-500">
+              Branching journey mode active — CTA metadata can drive edge conditions.
+            </p>
+          )}
         </div>
         <LiveKuzeButton sessionId={sessionId} token={token} />
       </div>
@@ -189,6 +332,11 @@ export function DemoPlayer({
       <ProgressBar completed={completedCount} total={Math.max(1, total)} />
 
       <Card>
+        {actionError && (
+          <p className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-200">
+            {actionError}
+          </p>
+        )}
         {narrationForOverlay && showNarration && (
           <KuzeNarration
             script={narrationForOverlay}
@@ -208,9 +356,31 @@ export function DemoPlayer({
         )}
         <ModuleRenderer
           module={current}
-          onComplete={() => handleComplete().catch(console.error)}
-          onSkip={() => handleSkip().catch(console.error)}
-          onCta={(meta) => handleCta(meta).catch(console.error)}
+          onComplete={() =>
+            handleComplete().catch((err: unknown) => {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "Failed to complete this module.";
+              setActionError(message);
+            })
+          }
+          onSkip={() =>
+            handleSkip().catch((err: unknown) => {
+              const message =
+                err instanceof Error ? err.message : "Failed to skip module.";
+              setActionError(message);
+            })
+          }
+          onCta={(meta) =>
+            handleCta(meta).catch((err: unknown) => {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "Failed to record CTA interaction.";
+              setActionError(message);
+            })
+          }
         />
       </Card>
     </div>

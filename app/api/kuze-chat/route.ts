@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAnthropicClient, getAnthropicModel } from "@/lib/anthropic";
 import { logSystemEvent } from "@/lib/logging";
-import { KUZE_SESSION_FACTS, type KuzeContext } from "@/lib/kuze";
+import { buildKuzeModelSystemPrompt } from "@/lib/kuze/assembly";
+import { type KuzeContext } from "@/lib/kuze";
 import { PRODUCT_LABELS } from "@/lib/constants";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import {
-  buildDemoSystemPrompt,
   getPersona,
   PersonaInactiveError,
   PersonaNotFoundError,
@@ -19,6 +19,20 @@ interface TranscriptEntry {
   role: "user" | "assistant";
   content: string;
   timestamp: string;
+}
+
+function buildFallbackKuzeReply(input: {
+  ctx: KuzeContext;
+  userMessage: string;
+}): string {
+  const pains = input.ctx.painPoints.length
+    ? input.ctx.painPoints.join(", ")
+    : "onboarding consistency";
+  return [
+    `You're asking about ${input.ctx.productName} in the context of ${input.ctx.currentModuleTitle}.`,
+    `Given your priorities (${pains}), the practical next move is to define one measurable outcome for the first 30 days, then map module delivery to that metric.`,
+    `If you want, I can outline the exact rollout sequence for ${input.ctx.organization || "your team"} in three steps.`,
+  ].join(" ");
 }
 
 async function persistAfterChat(
@@ -91,9 +105,19 @@ export async function POST(request: Request) {
     };
     const { sessionToken, message, conversationHistory } = body;
     if (!sessionToken || typeof sessionToken !== "string") {
+      await logSystemEvent({
+        function_name: "kuze_chat",
+        status: "error",
+        message: "sessionToken required",
+      });
       return NextResponse.json({ error: "sessionToken required" }, { status: 400 });
     }
     if (!message || typeof message !== "string") {
+      await logSystemEvent({
+        function_name: "kuze_chat",
+        status: "error",
+        message: "message required",
+      });
       return NextResponse.json({ error: "message required" }, { status: 400 });
     }
     const history = Array.isArray(conversationHistory) ? conversationHistory : [];
@@ -106,6 +130,11 @@ export async function POST(request: Request) {
       .single();
 
     if (sErr || !session) {
+      await logSystemEvent({
+        function_name: "kuze_chat",
+        status: "error",
+        message: "Session not found",
+      });
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
@@ -120,6 +149,12 @@ export async function POST(request: Request) {
       .eq("id", prospectId)
       .single();
     if (pErr || !prospect) {
+      await logSystemEvent({
+        function_name: "kuze_chat",
+        session_id: sessionIdForLog,
+        status: "error",
+        message: "Prospect not found",
+      });
       return NextResponse.json({ error: "Prospect not found" }, { status: 404 });
     }
 
@@ -129,6 +164,12 @@ export async function POST(request: Request) {
       .eq("id", trackId)
       .single();
     if (tErr || !track) {
+      await logSystemEvent({
+        function_name: "kuze_chat",
+        session_id: sessionIdForLog,
+        status: "error",
+        message: "Track not found",
+      });
       return NextResponse.json({ error: "Track not found" }, { status: 404 });
     }
 
@@ -162,12 +203,18 @@ export async function POST(request: Request) {
       persona = await getPersona(supabase, productKey);
     } catch (e) {
       if (e instanceof PersonaNotFoundError || e instanceof PersonaInactiveError) {
+        await logSystemEvent({
+          function_name: "kuze_chat",
+          session_id: sessionIdForLog,
+          status: "error",
+          message: e.message,
+        });
         return NextResponse.json({ error: e.message }, { status: 404 });
       }
       throw e;
     }
 
-    const systemPrompt = `${buildDemoSystemPrompt(persona)}\n\n${KUZE_SESSION_FACTS(ctx)}`;
+    const systemPrompt = buildKuzeModelSystemPrompt({ persona, kuzeContext: ctx });
 
     const anthropic = getAnthropicClient();
     const messages: MessageParam[] = [
@@ -180,12 +227,73 @@ export async function POST(request: Request) {
       { role: "user", content: message },
     ];
 
-    const modelStream = anthropic.messages.stream({
-      model: getAnthropicModel(),
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages,
-    });
+    const buildSseResponse = async (text: string) => {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
+            );
+            await persistAfterChat(
+              supabase,
+              sessionIdForLog!,
+              moduleId,
+              message,
+              text
+            );
+            await logSystemEvent({
+              function_name: "kuze_chat",
+              session_id: sessionIdForLog,
+              status: "success",
+              message: "Fallback response complete",
+            });
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            await logSystemEvent({
+              function_name: "kuze_chat",
+              session_id: sessionIdForLog,
+              status: "error",
+              message: msg,
+            });
+            controller.error(e instanceof Error ? e : new Error(msg));
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    };
+
+    let modelStream: ReturnType<typeof anthropic.messages.stream> | null = null;
+    try {
+      modelStream = anthropic.messages.stream({
+        model: getAnthropicModel(),
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (
+        msg.includes("authentication_error") ||
+        msg.includes("invalid x-api-key") ||
+        msg.includes("rate_limit_error") ||
+        msg.includes("overloaded_error") ||
+        msg.includes("timeout")
+      ) {
+        const fallbackText = buildFallbackKuzeReply({ ctx, userMessage: message });
+        return buildSseResponse(fallbackText);
+      }
+      throw e;
+    }
 
     const encoder = new TextEncoder();
     let assistantAccum = "";
@@ -224,6 +332,35 @@ export async function POST(request: Request) {
           controller.close();
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
+          if (
+            msg.includes("authentication_error") ||
+            msg.includes("invalid x-api-key") ||
+            msg.includes("rate_limit_error") ||
+            msg.includes("overloaded_error") ||
+            msg.includes("timeout")
+          ) {
+            const fallbackText = buildFallbackKuzeReply({ ctx, userMessage: message });
+            assistantAccum = fallbackText;
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ text: fallbackText })}\n\n`)
+            );
+            await persistAfterChat(
+              supabase,
+              sessionIdForLog!,
+              moduleId,
+              message,
+              assistantAccum
+            );
+            await logSystemEvent({
+              function_name: "kuze_chat",
+              session_id: sessionIdForLog,
+              status: "success",
+              message: "Fallback response complete",
+            });
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+            return;
+          }
           await logSystemEvent({
             function_name: "kuze_chat",
             session_id: sessionIdForLog,

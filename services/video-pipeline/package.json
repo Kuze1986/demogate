@@ -1,0 +1,10 @@
+{
+  "name": "@demoforge/video-pipeline",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file=../../.env.local src/worker.js",
+    "start": "node src/worker.js"
+  }
+}

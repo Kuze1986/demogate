@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { canAccessAdminPanel } from "@/lib/governance/policy";
 import {
   createServerSupabaseClient,
   createServiceSupabaseClient,
@@ -12,8 +13,15 @@ async function requireAdmin() {
   const {
     data: { user },
   } = await s.auth.getUser();
-  const admin = process.env.ADMIN_EMAIL;
-  if (!user?.email || !admin || user.email !== admin) {
+  if (!user?.id) {
+    throw new Error("Unauthorized");
+  }
+  const svc = createServiceSupabaseClient();
+  const allowed = await canAccessAdminPanel(svc, {
+    id: user.id,
+    email: user.email,
+  });
+  if (!allowed) {
     throw new Error("Unauthorized");
   }
 }
@@ -119,4 +127,127 @@ export async function reorderModule(
     throw new Error(e2.message);
   }
   revalidatePath(`/admin/tracks/${trackId}`);
+}
+
+export async function setTrackEntryNode(trackId: string, entryNodeId: string | null) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase
+    .from("demo_tracks")
+    .update({ entry_node_id: entryNodeId })
+    .eq("id", trackId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+}
+
+export async function createJourneyNode(trackId: string, moduleId: string | null) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { data, error } = await supabase
+    .from("journey_nodes")
+    .insert({
+      track_id: trackId,
+      module_id: moduleId,
+      node_type: "module",
+      label: moduleId ? "Module node" : "Unassigned node",
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to create journey node");
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+  return data.id as string;
+}
+
+export async function deleteJourneyNode(nodeId: string, trackId: string) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error: e0 } = await supabase
+    .from("journey_edges")
+    .delete()
+    .or(`from_node_id.eq.${nodeId},to_node_id.eq.${nodeId}`);
+  if (e0) {
+    throw new Error(e0.message);
+  }
+  const { error } = await supabase.from("journey_nodes").delete().eq("id", nodeId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+}
+
+export async function createJourneyEdge(
+  trackId: string,
+  fromNodeId: string,
+  toNodeId: string,
+  priority: number,
+  condition: Record<string, unknown> | null
+) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase.from("journey_edges").insert({
+    track_id: trackId,
+    from_node_id: fromNodeId,
+    to_node_id: toNodeId,
+    priority,
+    condition,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+}
+
+export async function deleteJourneyEdge(edgeId: string, trackId: string) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase.from("journey_edges").delete().eq("id", edgeId);
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+}
+
+export async function registerIntegrationEndpoint(input: {
+  name: string;
+  url: string;
+  tenantId?: string | null;
+  eventFilter: string[];
+  secret?: string | null;
+}) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase.from("integration_endpoints").insert({
+    tenant_id: input.tenantId ?? null,
+    name: input.name,
+    url: input.url,
+    secret: input.secret ?? null,
+    event_filter: input.eventFilter,
+    enabled: true,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath("/admin/integrations");
+}
+
+export async function createJourneyTemplate(input: {
+  tenantId?: string | null;
+  name: string;
+  description?: string | null;
+}) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { error } = await supabase.from("journey_templates").insert({
+    tenant_id: input.tenantId ?? null,
+    name: input.name,
+    description: input.description ?? null,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath("/admin/tracks/templates");
 }

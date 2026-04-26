@@ -7,7 +7,8 @@ export type SessionEventType =
   | "kuze_message_sent"
   | "cta_click"
   | "demo_complete"
-  | "demo_drop";
+  | "demo_drop"
+  | "journey_branch_decision";
 
 export interface TrackEventPayload {
   sessionToken: string;

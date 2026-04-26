@@ -1,13 +1,21 @@
 import { NextResponse } from "next/server";
+import { recordBehaviorSignal } from "@/lib/behavior/signals";
+import { fetchCrucibleBehaviorProfile } from "@/lib/crucible/client";
+import { hubspotUpsertContactStub } from "@/lib/integrations/crm/hubspot";
+import { salesforceUpsertLeadStub } from "@/lib/integrations/crm/salesforce";
+import { dispatchIntegrationEvent } from "@/lib/integrations/index";
 import { logSystemEvent } from "@/lib/logging";
 import {
   fetchTrackForProductPersona,
   runProspectRoutingAI,
   type RoutingInput,
 } from "@/lib/routing";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { ProductKey } from "@/types/demo";
 import type { ProspectPersona } from "@/types/demo";
+import { enqueueVideoJob } from "@/lib/video/queue";
+import { isVideoFeatureEnabled } from "@/lib/video/flags";
+import { pickVideoVariantOrder } from "@/lib/video/variant-policy";
 
 const VALID_PRODUCT_KEYS: ProductKey[] = [
   "keystone",
@@ -64,6 +72,11 @@ export async function POST(request: Request) {
     const json = (await request.json()) as unknown;
     parsed = validateBody(json);
     if (!parsed) {
+      await logSystemEvent({
+        function_name: "route_prospect",
+        status: "error",
+        message: "Invalid request body",
+      });
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
@@ -178,6 +191,75 @@ export async function POST(request: Request) {
         trackId: track.id,
       },
     });
+
+    try {
+      await hubspotUpsertContactStub({
+        email: parsed.email,
+        firstName: parsed.firstName,
+        lastName: parsed.lastName,
+        company: parsed.organization,
+      });
+      await salesforceUpsertLeadStub({
+        email: parsed.email,
+        company: parsed.organization,
+        title: parsed.role,
+      });
+      await dispatchIntegrationEvent({
+        tenantId: null,
+        eventType: "lead.created",
+        idempotencyKey: `prospect:${prospect.id as string}`,
+        body: {
+          prospectId: prospect.id,
+          sessionId: session.id,
+          email: parsed.email,
+          organization: parsed.organization,
+          product: ai.product,
+          persona: ai.persona,
+        },
+      });
+      const crucible = await fetchCrucibleBehaviorProfile({
+        sessionId: session.id as string,
+        correlationId: session.id as string,
+        product: ai.product as ProductKey,
+        persona: ai.persona as ProspectPersona,
+      });
+      await recordBehaviorSignal({
+        sessionId: session.id as string,
+        signalKind: "crucible.profile",
+        payload: {
+          profile: crucible.profile,
+          source: crucible.source,
+        },
+      });
+    } catch (syncErr) {
+      await logSystemEvent({
+        function_name: "route_prospect.integrations",
+        session_id: session.id as string,
+        status: "error",
+        message: syncErr instanceof Error ? syncErr.message : String(syncErr),
+      });
+    }
+
+    if (await isVideoFeatureEnabled("video_pipeline_enabled")) {
+      try {
+        const variants = await pickVideoVariantOrder();
+        await enqueueVideoJob({
+          sessionId: session.id as string,
+          prospectId: prospect.id as string,
+          product: ai.product as ProductKey,
+          persona: ai.persona as ProspectPersona,
+          triggeredBy: "intake",
+          variants,
+        });
+      } catch (videoErr) {
+        await logSystemEvent({
+          function_name: "route_prospect_video_enqueue",
+          session_id: session.id as string,
+          status: "error",
+          message: videoErr instanceof Error ? videoErr.message : String(videoErr),
+        });
+      }
+    }
 
     return NextResponse.json({
       qualified: true,

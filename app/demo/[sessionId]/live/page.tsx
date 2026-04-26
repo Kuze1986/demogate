@@ -29,7 +29,11 @@ export default async function KuzeLivePage({
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8">
+    <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="mb-4">
+        <p className="text-xs uppercase tracking-[0.22em] soft-muted">Live AI Session</p>
+        <h1 className="text-2xl font-semibold">Kuze Co-Pilot</h1>
+      </div>
       <KuzeChatPanel sessionToken={token} />
     </div>
   );

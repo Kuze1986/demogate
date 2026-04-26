@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { DemoPlayer } from "@/components/player/DemoPlayer";
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { DemoModuleRow } from "@/types/demo";
+import type { JourneyEdgeRow, JourneyNodeRow } from "@/types/journey";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function DemoSessionPage({
 
   const { data: track, error: tErr } = await supabase
     .from("demo_tracks")
-    .select("name")
+    .select("name, entry_node_id")
     .eq("id", session.track_id as string)
     .single();
 
@@ -49,8 +50,28 @@ export default async function DemoSessionPage({
     notFound();
   }
 
+  const { data: journeyNodes } = await supabase
+    .from("journey_nodes")
+    .select("*")
+    .eq("track_id", session.track_id as string);
+
+  const { data: journeyEdges } = await supabase
+    .from("journey_edges")
+    .select("*")
+    .eq("track_id", session.track_id as string)
+    .order("priority", { ascending: true });
+
+  const journey =
+    journeyNodes && journeyEdges
+      ? {
+          entryNodeId: (track.entry_node_id as string | null) ?? null,
+          nodes: journeyNodes as JourneyNodeRow[],
+          edges: journeyEdges as JourneyEdgeRow[],
+        }
+      : null;
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
+    <div className="mx-auto max-w-5xl px-4 py-10">
       <DemoPlayer
         sessionId={session.id as string}
         token={token}
@@ -61,6 +82,7 @@ export default async function DemoSessionPage({
           modules_total: session.modules_total ?? 0,
           current_module_id: session.current_module_id as string | null,
         }}
+        journey={journey}
       />
     </div>
   );

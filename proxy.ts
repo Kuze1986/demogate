@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { canAccessAdminPanel } from "@/lib/governance/policy";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import { updateSession } from "@/lib/supabase/middleware";
 
 async function adminGate(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const adminEmail = process.env.ADMIN_EMAIL;
   let res = NextResponse.next({ request });
 
   if (!url || !key) {
@@ -35,7 +36,19 @@ async function adminGate(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/login", request.url));
   }
 
-  if (adminEmail && user.email !== adminEmail) {
+  try {
+    const svc = createServiceSupabaseClient();
+    const allowed = await canAccessAdminPanel(svc, {
+      id: user.id,
+      email: user.email,
+    });
+    if (!allowed) {
+      await supabase.auth.signOut();
+      return NextResponse.redirect(
+        new URL("/admin/login?error=forbidden", request.url)
+      );
+    }
+  } catch {
     await supabase.auth.signOut();
     return NextResponse.redirect(
       new URL("/admin/login?error=forbidden", request.url)
@@ -45,7 +58,7 @@ async function adminGate(request: NextRequest) {
   return res;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
   if (path.startsWith("/admin") && !path.startsWith("/admin/login")) {
     return adminGate(request);
