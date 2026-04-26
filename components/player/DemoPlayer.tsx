@@ -21,6 +21,13 @@ interface InitialSession {
   current_module_id: string | null;
 }
 
+interface CrucibleBranchState {
+  engagement_trajectory: "rising" | "falling" | "stable" | "volatile";
+  friction_points: string[];
+  recommended_pivot: string | null;
+  confidence: number;
+}
+
 export interface DemoJourneyGraph {
   entryNodeId: string | null;
   nodes: JourneyNodeRow[];
@@ -34,6 +41,7 @@ export function DemoPlayer({
   modules,
   initialSession,
   journey,
+  crucibleState,
 }: {
   sessionId: string;
   token: string;
@@ -41,6 +49,7 @@ export function DemoPlayer({
   modules: DemoModuleRow[];
   initialSession: InitialSession;
   journey?: DemoJourneyGraph | null;
+  crucibleState?: CrucibleBranchState | null;
 }) {
   const router = useRouter();
   const ordered = useMemo(
@@ -159,10 +168,18 @@ export function DemoPlayer({
       decisionMeta: Record<string, unknown> | null
     ) => {
       if (!journey) return;
+      const enrichedDecisionMeta = crucibleState
+        ? {
+            ...(decisionMeta ?? {}),
+            engagement_trajectory: crucibleState.engagement_trajectory,
+            recommended_pivot: crucibleState.recommended_pivot ?? "",
+            has_friction: crucibleState.friction_points.length > 0 ? "true" : "false",
+          }
+        : decisionMeta;
       const nextNodeId = pickNextNodeId({
         edges: journey.edges,
         currentNodeId: fromNodeId,
-        decisionMetadata: decisionMeta,
+        decisionMetadata: enrichedDecisionMeta,
       });
       await trackEvent({
         moduleId: fromModuleId,
@@ -170,7 +187,7 @@ export function DemoPlayer({
         metadata: {
           from_node_id: fromNodeId,
           to_node_id: nextNodeId,
-          decision: decisionMeta,
+          decision: enrichedDecisionMeta,
         },
       });
       if (!nextNodeId) {
@@ -192,7 +209,7 @@ export function DemoPlayer({
       });
       setCurrentNodeId(nextNodeId);
     },
-    [finishDemo, journey, trackEvent]
+    [crucibleState, finishDemo, journey, trackEvent]
   );
 
   const handleComplete = useCallback(async () => {

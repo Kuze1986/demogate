@@ -5,6 +5,8 @@ import { buildKuzeModelSystemPrompt } from "@/lib/kuze/assembly";
 import { type KuzeContext } from "@/lib/kuze";
 import { PRODUCT_LABELS } from "@/lib/constants";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { fetchCrucibleSessionState } from "@/lib/crucible/client";
+import { forwardSignalToCrucible } from "@/lib/behavior/signals";
 import {
   getPersona,
   PersonaInactiveError,
@@ -42,57 +44,114 @@ async function persistAfterChat(
   userMessage: string,
   assistantText: string
 ) {
-  const now = new Date().toISOString();
-  const userEntry: TranscriptEntry = {
-    role: "user",
-    content: userMessage,
-    timestamp: now,
-  };
-  const asstEntry: TranscriptEntry = {
-    role: "assistant",
-    content: assistantText,
-    timestamp: now,
-  };
+  let transcriptWriteFailed = false;
+  let eventWriteFailed = false;
 
-  const { data: kuzeRow } = await supabase
-    .from("kuze_sessions")
-    .select("id, transcript, message_count")
-    .eq("session_id", sessionId)
-    .is("ended_at", null)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const now = new Date().toISOString();
+    const userEntry: TranscriptEntry = {
+      role: "user",
+      content: userMessage,
+      timestamp: now,
+    };
+    const asstEntry: TranscriptEntry = {
+      role: "assistant",
+      content: assistantText,
+      timestamp: now,
+    };
 
-  const prev = (kuzeRow?.transcript as TranscriptEntry[] | null) ?? [];
-  const nextTranscript = [...prev, userEntry, asstEntry];
-  const nextCount = (kuzeRow?.message_count as number | null) ?? 0;
-  const messageCount = nextCount + 1;
-
-  if (kuzeRow?.id) {
-    const { error } = await supabase
+    const { data: kuzeRow, error: kuzeReadErr } = await supabase
       .from("kuze_sessions")
-      .update({
-        transcript: nextTranscript,
-        message_count: messageCount,
-      })
-      .eq("id", kuzeRow.id as string);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from("kuze_sessions").insert({
+      .select("id, transcript, message_count")
+      .eq("session_id", sessionId)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (kuzeReadErr) {
+      transcriptWriteFailed = true;
+      await logSystemEvent({
+        function_name: "persist_after_chat",
+        session_id: sessionId,
+        status: "error",
+        message: kuzeReadErr.message,
+      });
+    } else {
+      const prev = (kuzeRow?.transcript as TranscriptEntry[] | null) ?? [];
+      const nextTranscript = [...prev, userEntry, asstEntry];
+      const nextCount = (kuzeRow?.message_count as number | null) ?? 0;
+      const messageCount = nextCount + 1;
+
+      if (kuzeRow?.id) {
+        const { error } = await supabase
+          .from("kuze_sessions")
+          .update({
+            transcript: nextTranscript,
+            message_count: messageCount,
+          })
+          .eq("id", kuzeRow.id as string);
+        if (error) {
+          transcriptWriteFailed = true;
+          await logSystemEvent({
+            function_name: "persist_after_chat",
+            session_id: sessionId,
+            status: "error",
+            message: error.message,
+          });
+        }
+      } else {
+        const { error } = await supabase.from("kuze_sessions").insert({
+          session_id: sessionId,
+          transcript: nextTranscript,
+          message_count: messageCount,
+        });
+        if (error) {
+          transcriptWriteFailed = true;
+          await logSystemEvent({
+            function_name: "persist_after_chat",
+            session_id: sessionId,
+            status: "error",
+            message: error.message,
+          });
+        }
+      }
+    }
+
+    const { error: evErr } = await supabase.from("session_events").insert({
       session_id: sessionId,
-      transcript: nextTranscript,
-      message_count: messageCount,
+      module_id: moduleId,
+      event_type: "kuze_message_sent",
+      metadata: { preview: assistantText.slice(0, 200) },
     });
-    if (error) throw new Error(error.message);
+    if (evErr) {
+      eventWriteFailed = true;
+      await logSystemEvent({
+        function_name: "persist_after_chat",
+        session_id: sessionId,
+        status: "error",
+        message: evErr.message,
+      });
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    transcriptWriteFailed = true;
+    await logSystemEvent({
+      function_name: "persist_after_chat",
+      session_id: sessionId,
+      status: "error",
+      message,
+    });
   }
 
-  const { error: evErr } = await supabase.from("session_events").insert({
-    session_id: sessionId,
-    module_id: moduleId,
-    event_type: "kuze_message_sent",
-    metadata: { preview: assistantText.slice(0, 200) },
-  });
-  if (evErr) throw new Error(evErr.message);
+  if (transcriptWriteFailed && eventWriteFailed) {
+    await logSystemEvent({
+      function_name: "persist_after_chat",
+      session_id: sessionId,
+      status: "error",
+      message: `Full persist failed for session ${sessionId}`,
+    });
+  }
 }
 
 export async function POST(request: Request) {
@@ -183,6 +242,13 @@ export async function POST(request: Request) {
       if (mod?.title) moduleTitle = mod.title as string;
     }
 
+    let crucibleState: Awaited<ReturnType<typeof fetchCrucibleSessionState>> = null;
+    try {
+      crucibleState = await fetchCrucibleSessionState({ sessionId: session.id as string });
+    } catch {
+      crucibleState = null;
+    }
+
     const productKey = track.product as ProductKey;
     const first = prospect.first_name ?? "";
     const last = prospect.last_name ?? "";
@@ -196,6 +262,7 @@ export async function POST(request: Request) {
       productName: PRODUCT_LABELS[productKey] ?? productKey,
       trackName: (track.name as string) ?? "",
       currentModuleTitle: moduleTitle,
+      behavioralState: crucibleState,
     };
 
     let persona;
@@ -250,6 +317,21 @@ export async function POST(request: Request) {
             });
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
+            void forwardSignalToCrucible(
+              {
+                sessionId: sessionIdForLog,
+                renderId: null,
+                signalKind: "kuze_message",
+                payload: {
+                  journey_node_id: moduleId ?? "unknown",
+                  message_length: message.length,
+                  has_behavioral_state: crucibleState !== null,
+                },
+              },
+              "ambassador"
+            ).catch((error) => {
+              console.error(error);
+            });
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             await logSystemEvent({
@@ -330,6 +412,21 @@ export async function POST(request: Request) {
           });
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
+          void forwardSignalToCrucible(
+            {
+              sessionId: sessionIdForLog,
+              renderId: null,
+              signalKind: "kuze_message",
+              payload: {
+                journey_node_id: moduleId ?? "unknown",
+                message_length: message.length,
+                has_behavioral_state: crucibleState !== null,
+              },
+            },
+            "ambassador"
+          ).catch((error) => {
+            console.error(error);
+          });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           if (
@@ -359,6 +456,21 @@ export async function POST(request: Request) {
             });
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
+            void forwardSignalToCrucible(
+              {
+                sessionId: sessionIdForLog,
+                renderId: null,
+                signalKind: "kuze_message",
+                payload: {
+                  journey_node_id: moduleId ?? "unknown",
+                  message_length: message.length,
+                  has_behavioral_state: crucibleState !== null,
+                },
+              },
+              "ambassador"
+            ).catch((error) => {
+              console.error(error);
+            });
             return;
           }
           await logSystemEvent({

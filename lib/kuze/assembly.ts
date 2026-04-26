@@ -16,7 +16,30 @@ export function buildKuzeModelSystemPrompt(input: {
 }): string {
   const base = buildDemoSystemPrompt(input.persona);
   const overlay = KUZE_SYSTEM_PROMPT(input.kuzeContext);
-  return [base, KUZE_VOICE_APPENDIX, overlay].join("\n\n");
+  const behavioral = input.kuzeContext.behavioralState;
+  const behavioralSection = behavioral
+    ? [
+        "Live behavioral intelligence (adapt your approach in real time):",
+        `- Engagement trajectory: ${behavioral.engagement_trajectory} (${{
+          rising: "prospect is engaging more deeply",
+          falling: "prospect is losing interest",
+          stable: "prospect is at baseline engagement",
+          volatile: "prospect signals are inconsistent",
+        }[behavioral.engagement_trajectory]})`,
+        "- Friction points (areas of hesitation or resistance):",
+        ...(behavioral.friction_points.length
+          ? behavioral.friction_points.map((point) => `  - ${point}`)
+          : ["  - none detected"]),
+        `- Recommended pivot: ${
+          behavioral.recommended_pivot ??
+          "none provided; if engagement is falling or a friction point is active, choose a concrete pivot that lowers complexity and reconnects to the prospect's top pain."
+        }`,
+        `- Confidence: ${behavioral.confidence.toFixed(2)} (${behavioral.confidence < 0.4 ? "weight this signal lightly; validate with live conversation cues before pivoting." : "use this signal as meaningful guidance, while still validating in conversation."})`,
+      ].join("\n")
+    : null;
+  return [base, KUZE_VOICE_APPENDIX, behavioralSection ? `${overlay}\n\n${behavioralSection}` : overlay].join(
+    "\n\n"
+  );
 }
 
 export function buildKuzeSessionFacts(input: { kuzeContext: KuzeContext }): string {

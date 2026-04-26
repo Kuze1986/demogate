@@ -1,4 +1,5 @@
 import type { ProductKey, ProspectPersona } from "@/types/demo";
+import { checkCrucibleHealth } from "@/lib/crucible/health";
 
 export interface CrucibleBehaviorProfile {
   delayMultiplier: number;
@@ -26,6 +27,23 @@ interface CrucibleProfileRequest {
   correlationId: string;
   product: ProductKey;
   persona: ProspectPersona;
+}
+
+void checkCrucibleHealth().then((ok) => {
+  if (ok) {
+    console.log("[startup] Crucible reachable — behavioral loop active");
+  } else {
+    console.warn(
+      "[startup] Crucible unreachable — DemoForge sessions will use default Kuze behavior"
+    );
+  }
+});
+
+export interface CrucibleSessionState {
+  engagement_trajectory: "rising" | "falling" | "stable" | "volatile";
+  friction_points: string[];
+  recommended_pivot: string | null;
+  confidence: number;
 }
 
 function normalizeProfile(raw: unknown): CrucibleBehaviorProfile | null {
@@ -96,5 +114,64 @@ export async function fetchCrucibleBehaviorProfile(
     return { profile, source: "crucible" };
   } catch {
     return { profile: DEFAULT_PROFILE, source: "default" };
+  }
+}
+
+export async function fetchCrucibleSessionState(input: {
+  sessionId: string;
+}): Promise<CrucibleSessionState | null> {
+  const baseUrl = process.env.CRUCIBLE_SIM_BASE_URL;
+  if (!baseUrl) return null;
+
+  const apiKey = process.env.CRUCIBLE_SIM_API_KEY;
+
+  try {
+    const response = await fetch(
+      new URL(`/api/crucible/session/${encodeURIComponent(input.sessionId)}/state`, baseUrl),
+      {
+        method: "GET",
+        headers: {
+          ...(apiKey ? { "x-bioloop-key": apiKey } : {}),
+        },
+        signal: AbortSignal.timeout(2_500),
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const payload = (await response.json()) as Partial<CrucibleSessionState> | null;
+    if (!payload || typeof payload !== "object") return null;
+
+    const trajectory = payload.engagement_trajectory;
+    if (
+      trajectory !== "rising" &&
+      trajectory !== "falling" &&
+      trajectory !== "stable" &&
+      trajectory !== "volatile"
+    ) {
+      return null;
+    }
+
+    const friction_points = Array.isArray(payload.friction_points)
+      ? payload.friction_points.filter((item): item is string => typeof item === "string")
+      : null;
+    if (!friction_points) return null;
+
+    const recommended_pivot =
+      payload.recommended_pivot === null || typeof payload.recommended_pivot === "string"
+        ? payload.recommended_pivot
+        : null;
+
+    const confidence = Number(payload.confidence);
+    if (!Number.isFinite(confidence)) return null;
+
+    return {
+      engagement_trajectory: trajectory,
+      friction_points,
+      recommended_pivot,
+      confidence,
+    };
+  } catch {
+    return null;
   }
 }
