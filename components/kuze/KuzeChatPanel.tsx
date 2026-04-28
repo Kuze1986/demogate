@@ -109,12 +109,17 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
   }, [input, messages, scrollDown, sessionToken, streaming]);
 
   return (
-    <Card className="flex h-[min(680px,82vh)] flex-col">
+    <Card className="flex h-[min(560px,86vh)] flex-col p-3 sm:h-[min(620px,84vh)] sm:p-4 md:h-[min(680px,82vh)]">
       <div className="mb-3 flex items-center gap-2 border-b border-[color:var(--panel-border)] pb-3">
-        <KuzeAvatar size={40} />
+        <span className="block sm:hidden">
+          <KuzeAvatar size={32} />
+        </span>
+        <span className="hidden sm:block">
+          <KuzeAvatar size={40} />
+        </span>
         <div>
           <p className="text-sm font-semibold">Kuze</p>
-          <p className="text-xs soft-muted">NEXUS Holdings</p>
+          <p className="text-[11px] soft-muted sm:text-xs">NEXUS Holdings</p>
         </div>
       </div>
 
@@ -129,9 +134,18 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
             key={i}
             className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            {m.role === "assistant" && <KuzeAvatar size={32} />}
+            {m.role === "assistant" && (
+              <>
+                <span className="block sm:hidden">
+                  <KuzeAvatar size={24} />
+                </span>
+                <span className="hidden sm:block">
+                  <KuzeAvatar size={32} />
+                </span>
+              </>
+            )}
             <div
-              className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
+              className={`max-w-[90%] rounded-xl px-3 py-2 text-sm sm:max-w-[85%] ${
                 m.role === "user"
                   ? "bg-[color:var(--accent)] text-[#031218]"
                   : "bg-[rgba(255,255,255,0.08)] text-foreground"
@@ -156,9 +170,9 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
         <p className="mb-2 text-sm text-[color:var(--danger)]">{error}</p>
       )}
 
-      <div className="mt-2 flex gap-2 border-t border-[color:var(--panel-border)] pt-3">
+      <div className="mt-2 flex flex-col gap-2 border-t border-[color:var(--panel-border)] pt-3 sm:flex-row">
         <input
-          className="min-w-0 flex-1 rounded-xl border border-[color:var(--panel-border)] bg-black/20 px-3 py-2 text-sm outline-none focus:border-[color:var(--accent)]"
+          className="min-w-0 flex-1 rounded-xl border border-[color:var(--panel-border)] bg-black/20 px-3 py-2 text-base outline-none focus:border-[color:var(--accent)] sm:text-sm"
           placeholder="Message Kuze…"
           value={input}
           disabled={streaming}
@@ -170,7 +184,11 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
             }
           }}
         />
-        <Button disabled={streaming || !input.trim()} onClick={() => void send()}>
+        <Button
+          className="w-full sm:w-auto"
+          disabled={streaming || !input.trim()}
+          onClick={() => void send()}
+        >
           Send
         </Button>
       </div>

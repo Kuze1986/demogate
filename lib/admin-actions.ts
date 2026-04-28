@@ -52,6 +52,44 @@ export async function createModule(trackId: string) {
   revalidatePath(`/admin/tracks/${trackId}`);
 }
 
+export async function createCrucibleCompareModule(trackId: string) {
+  await requireAdmin();
+  const supabase = createServiceSupabaseClient();
+  const { data: last } = await supabase
+    .from("demo_modules")
+    .select("sequence_order")
+    .eq("track_id", trackId)
+    .order("sequence_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextOrder = (last?.sequence_order as number | undefined) ?? -1;
+  const baseUrl = process.env.CRUCIBLE_SIM_BASE_URL ?? "";
+  const compareUrl = baseUrl
+    ? `${baseUrl.replace(/\/$/, "")}/compare?ids=&embed=1`
+    : null;
+  const { error } = await supabase.from("demo_modules").insert({
+    track_id: trackId,
+    sequence_order: nextOrder + 1,
+    title: "Crucible comparison",
+    module_type: "iframe" as ModuleType,
+    content_url: compareUrl,
+    interaction_config: {
+      provider: "crucible",
+      mode: "compare",
+      base_url: baseUrl,
+      selected_run_ids: [],
+      available_runs: [],
+    },
+    narration_script: "Compare up to four Crucible runs side by side.",
+    is_skippable: true,
+    duration_seconds: 90,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  revalidatePath(`/admin/tracks/${trackId}`);
+}
+
 export async function updateModule(
   id: string,
   trackId: string,

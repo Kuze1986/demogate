@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ShareDemoLinkButton } from "@/components/demo/ShareDemoLinkButton";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export default async function DemoCompletePage({
 
   const score = session.engagement_score;
   const followUp = session.follow_up_sent;
+  const origin = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const sharePath = `/demo/${sessionId}?token=${encodeURIComponent(token)}`;
+  const shareUrl = origin ? `${origin.replace(/\/$/, "")}${sharePath}` : sharePath;
   const { data: bestRender } = await supabase
     .from("video_renders")
     .select("id, final_video_path, naturalness_score, video_jobs!inner(parent_session_id)")
@@ -102,6 +106,10 @@ export default async function DemoCompletePage({
           </div>
         )}
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link href="/billing">
+            <Button className="w-full sm:w-auto">Upgrade for full rollout</Button>
+          </Link>
+          <ShareDemoLinkButton url={shareUrl} />
           <Link href={`/demo/${sessionId}/live?token=${encodeURIComponent(token)}`}>
             <Button variant="secondary" className="w-full sm:w-auto">
               Continue with Kuze

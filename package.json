@@ -10,7 +10,11 @@
     "build": "next build && node scripts/postbuild-standalone.mjs",
     "start": "node scripts/start-standalone.cjs",
     "lint": "eslint",
-    "video:worker": "tsx --tsconfig tsconfig.json services/video-pipeline/src/worker.ts"
+    "video:worker": "tsx --tsconfig tsconfig.json services/video-pipeline/src/worker.ts",
+    "test:e2e:demo": "playwright test tests/e2e/demo-smoke.spec.ts",
+    "check:telemetry": "node scripts/check-track-event-contract.mjs",
+    "check:demo-links": "node scripts/check-demo-links.mjs",
+    "audit:non-manual": "npm run check:telemetry && npm run check:demo-links"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",

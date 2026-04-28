@@ -185,14 +185,35 @@ begin
 end
 $rbac_roles_seed$;
 
-create table if not exists demoforge.tenant_memberships (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references demoforge.tenants (id) on delete cascade,
-  user_id uuid not null references auth.users (id) on delete cascade,
-  role_id uuid not null references demoforge.roles (id) on delete restrict,
-  created_at timestamptz not null default now(),
-  unique (tenant_id, user_id)
-);
+do $tenant_memberships_roles_type$
+declare
+  role_id_type text;
+begin
+  select format_type(a.atttypid, a.atttypmod)
+    into role_id_type
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'demoforge'
+    and c.relname = 'roles'
+    and a.attname = 'id'
+    and a.attnum > 0
+    and not a.attisdropped;
+
+  role_id_type := coalesce(role_id_type, 'uuid');
+
+  execute format($sql$
+    create table if not exists demoforge.tenant_memberships (
+      id uuid primary key default gen_random_uuid(),
+      tenant_id uuid not null references demoforge.tenants (id) on delete cascade,
+      user_id uuid not null references auth.users (id) on delete cascade,
+      role_id %s not null references demoforge.roles (id) on delete restrict,
+      created_at timestamptz not null default now(),
+      unique (tenant_id, user_id)
+    )
+  $sql$, role_id_type);
+end
+$tenant_memberships_roles_type$;
 
 create table if not exists demoforge.audit_logs (
   id uuid primary key default gen_random_uuid(),

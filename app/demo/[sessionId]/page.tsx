@@ -11,10 +11,24 @@ export default async function DemoSessionPage({
   searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{
+    token?: string;
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+    utm_term?: string;
+    utm_content?: string;
+  }>;
 }) {
   const { sessionId } = await params;
-  const { token } = await searchParams;
+  const {
+    token,
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_term,
+    utm_content,
+  } = await searchParams;
   if (!token) {
     notFound();
   }
@@ -70,6 +84,14 @@ export default async function DemoSessionPage({
         }
       : null;
 
+  const attribution = {
+    ...(utm_source ? { utm_source } : {}),
+    ...(utm_medium ? { utm_medium } : {}),
+    ...(utm_campaign ? { utm_campaign } : {}),
+    ...(utm_term ? { utm_term } : {}),
+    ...(utm_content ? { utm_content } : {}),
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
       <DemoPlayer
@@ -83,6 +105,7 @@ export default async function DemoSessionPage({
           current_module_id: session.current_module_id as string | null,
         }}
         journey={journey}
+        attribution={Object.keys(attribution).length > 0 ? attribution : null}
       />
     </div>
   );

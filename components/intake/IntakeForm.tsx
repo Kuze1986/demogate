@@ -14,7 +14,11 @@ import { RoutingLoader } from "./RoutingLoader";
 
 const STEPS = 4;
 
-export function IntakeForm() {
+export function IntakeForm({
+  initialUtm = {},
+}: {
+  initialUtm?: Record<string, string>;
+}) {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -78,6 +82,13 @@ export function IntakeForm() {
     setError(null);
     setLoading(true);
     try {
+      const utm = {
+        utm_source: initialUtm.utm_source ?? "",
+        utm_medium: initialUtm.utm_medium ?? "",
+        utm_campaign: initialUtm.utm_campaign ?? "",
+        utm_term: initialUtm.utm_term ?? "",
+        utm_content: initialUtm.utm_content ?? "",
+      };
       const res = await fetch("/api/route-prospect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,6 +101,7 @@ export function IntakeForm() {
           orgType,
           painPoints,
           productInterest,
+          utm,
         }),
       });
       const data = (await res.json()) as {
@@ -110,7 +122,13 @@ export function IntakeForm() {
       if (!data.sessionId || !data.sessionToken) {
         throw new Error("Missing session from server");
       }
-      router.push(`/demo/${data.sessionId}?token=${encodeURIComponent(data.sessionToken)}`);
+      const nextParams = new URLSearchParams({
+        token: data.sessionToken,
+      });
+      for (const [key, value] of Object.entries(utm)) {
+        if (value) nextParams.set(key, value);
+      }
+      router.push(`/demo/${data.sessionId}?${nextParams.toString()}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setLoading(false);

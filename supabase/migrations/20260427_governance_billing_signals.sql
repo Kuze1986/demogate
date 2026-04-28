@@ -16,11 +16,32 @@ values
   ('billing.manage', 'Manage billing and subscriptions')
 on conflict (key) do nothing;
 
-create table if not exists demoforge.role_permissions (
-  role_id uuid not null references demoforge.roles (id) on delete cascade,
-  permission_id uuid not null references demoforge.permissions (id) on delete cascade,
-  primary key (role_id, permission_id)
-);
+do $role_permissions_roles_type$
+declare
+  role_id_type text;
+begin
+  select format_type(a.atttypid, a.atttypmod)
+    into role_id_type
+  from pg_attribute a
+  join pg_class c on c.oid = a.attrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'demoforge'
+    and c.relname = 'roles'
+    and a.attname = 'id'
+    and a.attnum > 0
+    and not a.attisdropped;
+
+  role_id_type := coalesce(role_id_type, 'uuid');
+
+  execute format($sql$
+    create table if not exists demoforge.role_permissions (
+      role_id %s not null references demoforge.roles (id) on delete cascade,
+      permission_id uuid not null references demoforge.permissions (id) on delete cascade,
+      primary key (role_id, permission_id)
+    )
+  $sql$, role_id_type);
+end
+$role_permissions_roles_type$;
 
 insert into demoforge.role_permissions (role_id, permission_id)
 select r.id, p.id

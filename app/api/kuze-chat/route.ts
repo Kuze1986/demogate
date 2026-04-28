@@ -1,3 +1,10 @@
+// Canonical Kuze narration source for DemoForge.
+// The KuzeChatPanel UI calls this route directly; AI Twin's
+// `/api/chat/demoforge` is intentionally kept as a backup adapter and is
+// wired into Crucible separately. Keep prompt construction in sync with
+// `lib/kuze/assembly.ts`; if behaviour diverges from AI Twin's
+// `server/src/promptBuilder.ts` ambassador mode, treat this file as the
+// authoritative source.
 import { NextResponse } from "next/server";
 import { getAnthropicClient, getAnthropicModel } from "@/lib/anthropic";
 import { logSystemEvent } from "@/lib/logging";

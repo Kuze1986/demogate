@@ -42,6 +42,7 @@ export function DemoPlayer({
   initialSession,
   journey,
   crucibleState,
+  attribution,
 }: {
   sessionId: string;
   token: string;
@@ -50,6 +51,7 @@ export function DemoPlayer({
   initialSession: InitialSession;
   journey?: DemoJourneyGraph | null;
   crucibleState?: CrucibleBranchState | null;
+  attribution?: Record<string, string> | null;
 }) {
   const router = useRouter();
   const ordered = useMemo(
@@ -117,7 +119,10 @@ export function DemoPlayer({
           sessionToken: token,
           moduleId: body.moduleId ?? null,
           eventType: body.eventType,
-          metadata: body.metadata ?? null,
+          metadata:
+            attribution && Object.keys(attribution).length > 0
+              ? { ...(body.metadata ?? {}), attribution }
+              : (body.metadata ?? null),
         }),
       });
       if (!res.ok) {
@@ -396,6 +401,30 @@ export function DemoPlayer({
                   ? err.message
                   : "Failed to record CTA interaction.";
               setActionError(message);
+            })
+          }
+          onVideoWatchHalf={() =>
+            trackEvent({
+              moduleId: current.id,
+              eventType: "video_watch_50",
+              metadata: {
+                watch_percent: 50,
+              },
+            })
+          }
+          onReplay={() =>
+            trackEvent({
+              moduleId: current.id,
+              eventType: "module_replay",
+            })
+          }
+          onVideoStart={() =>
+            trackEvent({
+              moduleId: current.id,
+              eventType: "video_view_start",
+              metadata: {
+                watch_percent: 0,
+              },
             })
           }
         />

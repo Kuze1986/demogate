@@ -20,6 +20,8 @@ const EVENT_TYPES: SessionEventType[] = [
   "demo_complete",
   "demo_drop",
   "journey_branch_decision",
+  "video_view_start",
+  "video_watch_50",
 ];
 
 function isEventType(s: string): s is SessionEventType {

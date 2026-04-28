@@ -42,6 +42,7 @@ interface RouteProspectBody extends RoutingInput {
   lastName: string;
   email: string;
   organization: string;
+  utm?: Record<string, string>;
 }
 
 function validateBody(b: unknown): RouteProspectBody | null {
@@ -52,6 +53,18 @@ function validateBody(b: unknown): RouteProspectBody | null {
     if (typeof o[k] !== "string" || !(o[k] as string).trim()) return null;
   }
   if (!Array.isArray(o.painPoints) || !Array.isArray(o.productInterest)) return null;
+  const utm =
+    o.utm && typeof o.utm === "object"
+      ? Object.entries(o.utm as Record<string, unknown>).reduce<Record<string, string>>(
+          (acc, [key, value]) => {
+            if (typeof value === "string") {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {}
+        )
+      : undefined;
   return {
     firstName: o.firstName as string,
     lastName: o.lastName as string,
@@ -63,6 +76,7 @@ function validateBody(b: unknown): RouteProspectBody | null {
     productInterest: o.productInterest as string[],
     employeeCount:
       typeof o.employeeCount === "string" ? o.employeeCount : undefined,
+    utm,
   };
 }
 
@@ -98,6 +112,7 @@ export async function POST(request: Request) {
       lastName: parsed.lastName,
       email: parsed.email,
       organization: parsed.organization,
+      utm: parsed.utm ?? null,
     };
 
     const { data: prospect, error: pErr } = await supabase
