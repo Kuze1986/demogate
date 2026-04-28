@@ -17,7 +17,7 @@ export function LiveKuzeButton({
     if (fired.current) return;
     fired.current = true;
     try {
-      await fetch("/api/track-event", {
+      const res = await fetch("/api/track-event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -25,6 +25,9 @@ export function LiveKuzeButton({
           eventType: "kuze_live_start",
         }),
       });
+      if (!res.ok) {
+        fired.current = false;
+      }
     } catch {
       fired.current = false;
     }

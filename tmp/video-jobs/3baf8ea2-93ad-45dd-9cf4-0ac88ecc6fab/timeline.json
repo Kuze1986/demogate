@@ -1,0 +1,22 @@
+[
+  {
+    "stepId": "open",
+    "startSeconds": 0.044,
+    "endSeconds": 0.084
+  },
+  {
+    "stepId": "intake",
+    "startSeconds": 0.084,
+    "endSeconds": 0.616
+  },
+  {
+    "stepId": "module_1",
+    "startSeconds": 0.616,
+    "endSeconds": 1.784
+  },
+  {
+    "stepId": "cta",
+    "startSeconds": 1.784,
+    "endSeconds": 2.375
+  }
+]

@@ -1,4 +1,4 @@
-import { createServiceSupabaseClient } from "@/lib/supabase/server";
+import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 const PERSONA_PROMPT_SEPARATOR = "\n\n---\n\n";
 

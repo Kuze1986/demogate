@@ -6,6 +6,12 @@ export interface KuzeContext {
   productName: string;
   trackName: string;
   currentModuleTitle: string;
+  behavioralState?: {
+    engagement_trajectory: "rising" | "falling" | "stable" | "volatile";
+    friction_points: string[];
+    recommended_pivot: string | null;
+    confidence: number;
+  } | null;
 }
 
 export function KUZE_SYSTEM_PROMPT(context: KuzeContext): string {
