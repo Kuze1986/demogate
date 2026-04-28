@@ -43,6 +43,7 @@ export function DemoPlayer({
   journey,
   crucibleState,
   attribution,
+  adminMode = false,
 }: {
   sessionId: string;
   token: string;
@@ -52,6 +53,7 @@ export function DemoPlayer({
   journey?: DemoJourneyGraph | null;
   crucibleState?: CrucibleBranchState | null;
   attribution?: Record<string, string> | null;
+  adminMode?: boolean;
 }) {
   const router = useRouter();
   const ordered = useMemo(
@@ -148,10 +150,14 @@ export function DemoPlayer({
   }, [current, trackEvent]);
 
   const finishDemo = useCallback(() => {
-    router.push(
-      `/demo/${sessionId}/complete?token=${encodeURIComponent(token)}`
-    );
-  }, [router, sessionId, token]);
+    const params = new URLSearchParams({
+      token,
+    });
+    if (adminMode) {
+      params.set("admin_mode", "1");
+    }
+    router.push(`/demo/${sessionId}/complete?${params.toString()}`);
+  }, [adminMode, router, sessionId, token]);
 
   const advanceLinear = useCallback(
     async (nextIdx: number) => {
@@ -348,7 +354,7 @@ export function DemoPlayer({
             </p>
           )}
         </div>
-        <LiveKuzeButton sessionId={sessionId} token={token} />
+        <LiveKuzeButton sessionId={sessionId} token={token} adminMode={adminMode} />
       </div>
 
       <ProgressBar completed={completedCount} total={Math.max(1, total)} />

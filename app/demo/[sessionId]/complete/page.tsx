@@ -12,10 +12,10 @@ export default async function DemoCompletePage({
   searchParams,
 }: {
   params: Promise<{ sessionId: string }>;
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; admin_mode?: string }>;
 }) {
   const { sessionId } = await params;
-  const { token } = await searchParams;
+  const { token, admin_mode } = await searchParams;
   if (!token) {
     notFound();
   }
@@ -33,8 +33,10 @@ export default async function DemoCompletePage({
 
   const score = session.engagement_score;
   const followUp = session.follow_up_sent;
+  const isAdminMode = admin_mode === "1";
+  const modeSuffix = isAdminMode ? "&admin_mode=1" : "";
   const origin = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  const sharePath = `/demo/${sessionId}?token=${encodeURIComponent(token)}`;
+  const sharePath = `/demo/${sessionId}?token=${encodeURIComponent(token)}${modeSuffix}`;
   const shareUrl = origin ? `${origin.replace(/\/$/, "")}${sharePath}` : sharePath;
   const { data: bestRender } = await supabase
     .from("video_renders")
@@ -58,6 +60,13 @@ export default async function DemoCompletePage({
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center px-4 py-16">
       <Card className="w-full text-center">
+        {isAdminMode && (
+          <div className="mb-4 text-left">
+            <Link href="/admin" className="text-sm text-[color:var(--accent)] hover:underline">
+              ← Back to admin mode
+            </Link>
+          </div>
+        )}
         <h1 className="text-xl font-semibold">Demo complete</h1>
         <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
           Thanks for walking through the NEXUS track.{" "}
@@ -110,12 +119,12 @@ export default async function DemoCompletePage({
             <Button className="w-full sm:w-auto">Upgrade for full rollout</Button>
           </Link>
           <ShareDemoLinkButton url={shareUrl} />
-          <Link href={`/demo/${sessionId}/live?token=${encodeURIComponent(token)}`}>
+          <Link href={`/demo/${sessionId}/live?token=${encodeURIComponent(token)}${modeSuffix}`}>
             <Button variant="secondary" className="w-full sm:w-auto">
               Continue with Kuze
             </Button>
           </Link>
-          <Link href="/demo">
+          <Link href={isAdminMode ? "/demo?admin_mode=1" : "/demo"}>
             <Button variant="ghost" className="w-full sm:w-auto">
               New intake
             </Button>

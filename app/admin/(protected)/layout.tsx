@@ -80,10 +80,10 @@ export default async function ProtectedAdminLayout({
             Integrations
           </Link>
           <Link
-            href="/demo"
+            href="/demo?admin_mode=1"
             className="rounded-xl px-3 py-2 text-foreground hover:bg-[rgba(44,247,223,0.12)]"
           >
-            Public demo
+            Switch to client mode
           </Link>
         </nav>
       </aside>
@@ -111,6 +111,12 @@ export default async function ProtectedAdminLayout({
               className="glass rounded-xl px-3 py-2 hover:bg-[rgba(44,247,223,0.12)]"
             >
               Leads
+            </Link>
+            <Link
+              href="/demo?admin_mode=1"
+              className="rounded-xl border border-[color:var(--accent)]/40 bg-[rgba(44,247,223,0.12)] px-3 py-2 text-[color:var(--accent)]"
+            >
+              Client mode
             </Link>
           </nav>
         </header>

@@ -16,8 +16,10 @@ const STEPS = 4;
 
 export function IntakeForm({
   initialUtm = {},
+  adminMode = false,
 }: {
   initialUtm?: Record<string, string>;
+  adminMode?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -127,6 +129,9 @@ export function IntakeForm({
       });
       for (const [key, value] of Object.entries(utm)) {
         if (value) nextParams.set(key, value);
+      }
+      if (adminMode) {
+        nextParams.set("admin_mode", "1");
       }
       router.push(`/demo/${data.sessionId}?${nextParams.toString()}`);
     } catch (e) {

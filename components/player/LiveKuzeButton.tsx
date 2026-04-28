@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/Button";
 export function LiveKuzeButton({
   sessionId,
   token,
+  adminMode = false,
 }: {
   sessionId: string;
   token: string;
+  adminMode?: boolean;
 }) {
   const fired = useRef(false);
 
@@ -33,7 +35,13 @@ export function LiveKuzeButton({
     }
   }
 
-  const href = `/demo/${sessionId}/live?token=${encodeURIComponent(token)}`;
+  const params = new URLSearchParams({
+    token,
+  });
+  if (adminMode) {
+    params.set("admin_mode", "1");
+  }
+  const href = `/demo/${sessionId}/live?${params.toString()}`;
 
   return (
     <Link href={href} onClick={() => void logStart()}>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DemoPlayer } from "@/components/player/DemoPlayer";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
@@ -18,6 +19,7 @@ export default async function DemoSessionPage({
     utm_campaign?: string;
     utm_term?: string;
     utm_content?: string;
+    admin_mode?: string;
   }>;
 }) {
   const { sessionId } = await params;
@@ -28,6 +30,7 @@ export default async function DemoSessionPage({
     utm_campaign,
     utm_term,
     utm_content,
+    admin_mode,
   } = await searchParams;
   if (!token) {
     notFound();
@@ -91,9 +94,17 @@ export default async function DemoSessionPage({
     ...(utm_term ? { utm_term } : {}),
     ...(utm_content ? { utm_content } : {}),
   };
+  const isAdminMode = admin_mode === "1";
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
+      {isAdminMode && (
+        <div className="mb-4">
+          <Link href="/admin" className="text-sm text-[color:var(--accent)] hover:underline">
+            ← Back to admin mode
+          </Link>
+        </div>
+      )}
       <DemoPlayer
         sessionId={session.id as string}
         token={token}
@@ -106,6 +117,7 @@ export default async function DemoSessionPage({
         }}
         journey={journey}
         attribution={Object.keys(attribution).length > 0 ? attribution : null}
+        adminMode={isAdminMode}
       />
     </div>
   );
