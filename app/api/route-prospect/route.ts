@@ -16,6 +16,7 @@ import type { ProspectPersona } from "@/types/demo";
 import { enqueueVideoJob } from "@/lib/video/queue";
 import { isVideoFeatureEnabled } from "@/lib/video/flags";
 import { pickVideoVariantOrder } from "@/lib/video/variant-policy";
+import { observe } from "@/lib/ilita";
 
 const VALID_PRODUCT_KEYS: ProductKey[] = [
   "keystone",
@@ -206,6 +207,18 @@ export async function POST(request: Request) {
         trackId: track.id,
       },
     });
+
+    void observe(
+      "demo_requested",
+      {
+        product: ai.product,
+        prospect_email: parsed.email.toLowerCase().trim(),
+        org: parsed.organization,
+        prospect_id: prospect.id,
+        session_id: session.id,
+      },
+      { significance: "high" }
+    );
 
     try {
       await hubspotUpsertContactStub({

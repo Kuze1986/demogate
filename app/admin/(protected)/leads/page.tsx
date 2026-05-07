@@ -72,9 +72,15 @@ export default async function LeadsPage({
         Prospects from intake, with latest demo session and BioLoop score.
       </p>
       <div className="flex flex-col gap-3">
-        {items.map((item) => (
-          <LeadCard key={item.prospect.id} item={item} />
-        ))}
+        {items.length === 0 ? (
+          <p className="rounded-xl border border-[color:var(--panel-border)] bg-black/20 p-6 text-sm text-zinc-500">
+            No prospects yet. When someone completes the public intake at{" "}
+            <span className="font-mono text-foreground">/demo</span>, they will show up here with
+            their latest session and track.
+          </p>
+        ) : (
+          items.map((item) => <LeadCard key={item.prospect.id} item={item} />)
+        )}
       </div>
     </div>
   );

@@ -64,15 +64,6 @@ export function ModuleRenderer({
   }, [module.interaction_config]);
 
   useEffect(() => {
-    halfWatchedRef.current = false;
-    startedRef.current = false;
-    setVideoError(null);
-    setAutoplayBlocked(false);
-    setIsLoadingVideo(module.module_type === "video");
-    setVideoEnded(false);
-  }, [module.id, module.module_type]);
-
-  useEffect(() => {
     if (module.module_type !== "video") return;
     const node = videoRef.current;
     if (!node) return;

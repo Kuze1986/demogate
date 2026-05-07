@@ -37,6 +37,9 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
       content: msg.content,
     }));
 
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10_000);
+
     try {
       const res = await fetch("/api/kuze-chat", {
         method: "POST",
@@ -46,6 +49,7 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
           message: text,
           conversationHistory: history,
         }),
+        signal: controller.signal,
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -96,13 +100,18 @@ export function KuzeChatPanel({ sessionToken }: { sessionToken: string }) {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Chat failed");
+      if (e instanceof Error && e.name === "AbortError") {
+        setError("Kuze took too long to respond. Try again in a moment.");
+      } else {
+        setError(e instanceof Error ? e.message : "Chat failed");
+      }
       setMessages((m) => {
         if (m[m.length - 1]?.role === "assistant" && m[m.length - 1].content === "")
           return m.slice(0, -1);
         return m;
       });
     } finally {
+      window.clearTimeout(timeoutId);
       setStreaming(false);
       scrollDown();
     }

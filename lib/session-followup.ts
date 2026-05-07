@@ -1,4 +1,5 @@
 import { getAnthropicClient, getAnthropicModel } from "@/lib/anthropic";
+import { observe } from "@/lib/ilita";
 import { logSystemEvent } from "@/lib/logging";
 import { buildKuzeFollowupSystemPrompt } from "@/lib/kuze/assembly";
 import { KUZE_SYSTEM_PROMPT, type KuzeContext } from "@/lib/kuze";
@@ -270,6 +271,17 @@ Return ONLY JSON: {"subject":"...","body_html":"..."} where body_html is concise
     message: "Email sent",
     payload: { resend_message_id: messageId },
   });
+
+  void observe(
+    "followup_sent",
+    {
+      product: productKey,
+      prospect_email: prospect.email as string,
+      session_id: sessionId,
+      resend_message_id: messageId || null,
+    },
+    { significance: "medium" }
+  );
 
   await dispatchIntegrationEvent({
     tenantId: null,

@@ -53,12 +53,16 @@ export function IntakeForm({
     });
   }
 
+  const emailLooksValid = (value: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+
   function canNext(): boolean {
     if (step === 1) {
       return Boolean(
         firstName.trim() &&
           lastName.trim() &&
           email.trim() &&
+          emailLooksValid(email) &&
           organization.trim()
       );
     }
@@ -82,6 +86,10 @@ export function IntakeForm({
 
   async function submit() {
     setError(null);
+    if (!emailLooksValid(email)) {
+      setError("Enter a valid work email address.");
+      return;
+    }
     setLoading(true);
     try {
       const utm = {

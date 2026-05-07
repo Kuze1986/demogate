@@ -85,7 +85,7 @@ export function DemoPlayer({
   const [completedCount, setCompletedCount] = useState(
     initialSession.modules_completed ?? 0
   );
-  const [showNarration, setShowNarration] = useState(false);
+  const [showNarration, setShowNarration] = useState(true);
   const [actionError, setActionError] = useState<string | null>(null);
   const [branchDecisionMeta, setBranchDecisionMeta] = useState<Record<
     string,
@@ -132,7 +132,7 @@ export function DemoPlayer({
         throw new Error(j.error ?? "track-event failed");
       }
     },
-    [token]
+    [token, attribution]
   );
 
   useEffect(() => {
@@ -383,6 +383,7 @@ export function DemoPlayer({
           </div>
         )}
         <ModuleRenderer
+          key={current.id}
           module={current}
           onComplete={() =>
             handleComplete().catch((err: unknown) => {

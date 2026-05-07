@@ -10,6 +10,7 @@
     "build": "next build && node scripts/postbuild-standalone.mjs",
     "start": "node scripts/start-standalone.cjs",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "video:worker": "tsx --tsconfig tsconfig.json services/video-pipeline/src/worker.ts",
     "test:e2e:demo": "playwright test tests/e2e/demo-smoke.spec.ts",
     "check:telemetry": "node scripts/check-track-event-contract.mjs",

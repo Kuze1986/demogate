@@ -335,10 +335,8 @@ export async function POST(request: Request) {
                   has_behavioral_state: crucibleState !== null,
                 },
               },
-              "ambassador"
-            ).catch((error) => {
-              console.error(error);
-            });
+              "operator"
+            ).catch(() => {});
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e);
             await logSystemEvent({
@@ -430,10 +428,8 @@ export async function POST(request: Request) {
                 has_behavioral_state: crucibleState !== null,
               },
             },
-            "ambassador"
-          ).catch((error) => {
-            console.error(error);
-          });
+            "operator"
+          ).catch(() => {});
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           if (
@@ -474,10 +470,8 @@ export async function POST(request: Request) {
                   has_behavioral_state: crucibleState !== null,
                 },
               },
-              "ambassador"
-            ).catch((error) => {
-              console.error(error);
-            });
+              "operator"
+            ).catch(() => {});
             return;
           }
           await logSystemEvent({

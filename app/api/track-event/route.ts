@@ -4,6 +4,8 @@ import { dispatchIntegrationEvent } from "@/lib/integrations/index";
 import { logSystemEvent } from "@/lib/logging";
 import { generateAndSendFollowUp } from "@/lib/session-followup";
 import { applyScoreForSession } from "@/lib/session-score";
+import { writeLeadToAxisForSession } from "@/lib/axis-lead";
+import { observe } from "@/lib/ilita";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { SessionEventType } from "@/types/events";
 
@@ -124,6 +126,37 @@ export async function POST(request: Request) {
       }
     }
 
+    if (eventType === "demo_complete") {
+      const { data: sess2 } = await supabase
+        .from("demo_sessions")
+        .select("id, started_at, completed_at, track_id")
+        .eq("id", sessionId)
+        .single();
+
+      let duration_seconds: number | null = null;
+      const started = sess2?.started_at as string | undefined;
+      const completed = sess2?.completed_at as string | undefined;
+      if (started && completed) {
+        duration_seconds = Math.round(
+          (new Date(completed).getTime() - new Date(started).getTime()) / 1000
+        );
+      }
+
+      const { data: tr } = sess2?.track_id
+        ? await supabase.from("demo_tracks").select("product").eq("id", sess2.track_id).single()
+        : { data: null };
+
+      void observe(
+        "demo_completed",
+        {
+          product: (tr?.product as string) ?? "unknown",
+          session_id: sessionId,
+          duration_seconds,
+        },
+        { significance: "critical" }
+      );
+    }
+
     await logSystemEvent({
       function_name: "track_event",
       session_id: sessionId,
@@ -157,6 +190,17 @@ export async function POST(request: Request) {
           const msg = e instanceof Error ? e.message : String(e);
           await logSystemEvent({
             function_name: "score_session",
+            session_id: sessionId,
+            status: "error",
+            message: msg,
+          });
+        }
+        try {
+          await writeLeadToAxisForSession(sessionId);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          await logSystemEvent({
+            function_name: "axis_lead_write",
             session_id: sessionId,
             status: "error",
             message: msg,
