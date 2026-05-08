@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/governance/requireAdmin";
 import { enqueueVideoJob } from "@/lib/video/queue";
 import { logVideoOperation } from "@/lib/video/logging";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/service";
 import type { ProductKey, ProspectPersona } from "@/types/demo";
 import type { VideoDeviceProfile, VideoVariantType } from "@/lib/video/types";
@@ -44,13 +44,10 @@ function sanitizeDeviceProfiles(deviceProfiles: unknown): VideoDeviceProfile[] {
 }
 
 export async function POST(request: Request) {
-  const serverSupabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await serverSupabase.auth.getUser();
-
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (!user || (adminEmail && user.email !== adminEmail)) {
+  let actor: { id: string; email?: string | null };
+  try {
+    actor = await requireAdmin();
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -123,7 +120,7 @@ export async function POST(request: Request) {
       sessionId,
       correlationId: enqueued.correlationId,
       payload: {
-        triggered_by_user: user.email ?? null,
+        triggered_by_user: actor.email ?? null,
         video_job_id: enqueued.videoJobId,
         queue_job_id: enqueued.queueJobId,
       },
@@ -143,7 +140,7 @@ export async function POST(request: Request) {
       status: "error",
       sessionId,
       message,
-      payload: { triggered_by_user: user.email ?? null },
+      payload: { triggered_by_user: actor.email ?? null },
     });
     return NextResponse.json({ error: message }, { status: 500 });
   }

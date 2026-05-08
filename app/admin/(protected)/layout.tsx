@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { canAccessAdminPanel } from "@/lib/governance/policy";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { getAdminActor } from "@/lib/governance/requireAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -11,21 +9,8 @@ export default async function ProtectedAdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/admin/login");
-  }
-
-  const svc = createServiceSupabaseClient();
-  const allowed = await canAccessAdminPanel(svc, {
-    id: user.id,
-    email: user.email,
-  });
-  if (!allowed) {
+  const actor = await getAdminActor();
+  if (!actor) {
     redirect("/admin/login?error=forbidden");
   }
 

@@ -1,30 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { canAccessAdminPanel } from "@/lib/governance/policy";
+import { requireAdmin } from "@/lib/governance/requireAdmin";
 import {
-  createServerSupabaseClient,
   createServiceSupabaseClient,
 } from "@/lib/supabase/server";
 import type { ModuleType } from "@/types/demo";
-
-async function requireAdmin() {
-  const s = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await s.auth.getUser();
-  if (!user?.id) {
-    throw new Error("Unauthorized");
-  }
-  const svc = createServiceSupabaseClient();
-  const allowed = await canAccessAdminPanel(svc, {
-    id: user.id,
-    email: user.email,
-  });
-  if (!allowed) {
-    throw new Error("Unauthorized");
-  }
-}
 
 export async function createModule(trackId: string) {
   await requireAdmin();

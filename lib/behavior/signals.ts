@@ -78,10 +78,22 @@ export async function forwardSignalToCrucible(
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(2_500),
       }
-    ).catch((error) => {
-      console.error(error);
+    ).catch(async (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      await logSystemEvent({
+        function_name: "forward_signal_crucible",
+        session_id: input.sessionId ?? undefined,
+        status: "error",
+        message,
+      });
     });
   } catch (error) {
-    console.error(error);
+    const message = error instanceof Error ? error.message : String(error);
+    void logSystemEvent({
+      function_name: "forward_signal_crucible",
+      session_id: input.sessionId ?? undefined,
+      status: "error",
+      message,
+    });
   }
 }

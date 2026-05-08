@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import { canAccessAdminPanel } from "@/lib/governance/policy";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createServiceSupabaseClient } from "@/lib/supabase/service";
+import { requireAdmin } from "@/lib/governance/requireAdmin";
 
 export const runtime = "nodejs";
 
@@ -33,20 +31,9 @@ function normalizeRunOptions(raw: unknown): CrucibleRunOption[] {
 }
 
 export async function GET() {
-  const serverSupabase = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await serverSupabase.auth.getUser();
-  if (!user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const svc = createServiceSupabaseClient();
-  const allowed = await canAccessAdminPanel(svc, {
-    id: user.id,
-    email: user.email,
-  });
-  if (!allowed) {
+  try {
+    await requireAdmin();
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

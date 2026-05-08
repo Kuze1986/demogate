@@ -53,7 +53,7 @@ export function LandingShowcase() {
               href="/admin/login"
               onClick={() => void emitLandingEvent("landing_cta_admin", { placement: "showcase_secondary" })}
             >
-              <Button variant="secondary">Explore Kuze AI guidance</Button>
+              <Button variant="secondary">Operator sign-in</Button>
             </Link>
           </div>
           <div className="mt-10 border-t border-white/10 pt-6">
@@ -70,28 +70,14 @@ export function LandingShowcase() {
         </div>
 
         <div className="rounded-3xl border border-[color:var(--panel-border)] bg-[linear-gradient(180deg,rgba(9,22,64,0.95),rgba(2,8,30,0.95))] p-8">
-          <h2 className="text-center text-xl font-semibold">Admin Dashboard Insights</h2>
+          <h2 className="text-center text-xl font-semibold">Operator console</h2>
+          <p className="mx-auto mt-2 max-w-md text-center text-xs text-zinc-400">
+            Live session counts, journey graphs, Kuze transcripts, and video jobs appear here for
+            your team — not placeholder metrics.
+          </p>
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4">
-              <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-                <p className="text-xs text-zinc-400">Active Session</p>
-                <p className="text-sm font-semibold">78</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-                <p className="text-xs text-zinc-400">Journey Graph</p>
-                <p className="text-sm font-semibold">36</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-                <p className="text-xs text-zinc-400">Live Kuze</p>
-                <p className="text-sm font-semibold">24</p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-                <p className="text-xs text-zinc-400">Video Pipeline</p>
-                <p className="text-sm font-semibold">12</p>
-              </div>
-            </div>
-            <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-4">
-              <p className="text-xs uppercase tracking-wide text-zinc-400">Control Plane Overview</p>
+            <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+              <p className="text-xs uppercase tracking-wide text-zinc-400">Control plane preview</p>
               <div className="mt-3 h-32 rounded-lg bg-[linear-gradient(180deg,rgba(44,247,223,0.2),transparent)]" />
             </div>
           </div>
