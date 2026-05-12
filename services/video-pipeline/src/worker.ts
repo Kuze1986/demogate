@@ -5,14 +5,31 @@ import IORedis from "ioredis";
 import {
   createServiceSupabaseClient,
   logVideoOperation,
-  VIDEO_GUARDRAILS,
-  VIDEO_JOB_STATUS,
-  VIDEO_QUEUE_NAMES,
   dispatchIntegrationEvent,
   buildCanonicalMediaPublicUrl,
   uploadFinalRenderToStorage,
 } from "./libInterop";
 import type { VideoQueuePayload } from "./libInterop";
+
+// Hardcoded to avoid CJS/ESM interop issues with lib/video/constants
+const VIDEO_QUEUE_NAMES = {
+  default: "demoforge-video-jobs",
+  deadLetter: "demoforge-video-dead-letter",
+} as const;
+
+const VIDEO_JOB_STATUS = {
+  queued: "queued",
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+  cancelled: "cancelled",
+  dead_letter: "dead_letter",
+} as const;
+
+const VIDEO_GUARDRAILS = {
+  defaultMaxRuntimeSeconds: 15 * 60,
+  defaultMaxRetries: 3,
+} as const;
 import { buildVideoScript } from "./scriptEngine";
 import { runCapture } from "./runner";
 import { runFfmpegPostProcess } from "./postProcess";
