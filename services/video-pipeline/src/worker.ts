@@ -244,6 +244,7 @@ const worker = new Worker<VideoQueuePayload>(
   {
     connection: getConn(),
     concurrency: Number(process.env.VIDEO_WORKER_CONCURRENCY ?? "2"),
+    enablePriorityQueue: true,
   }
 );
 
