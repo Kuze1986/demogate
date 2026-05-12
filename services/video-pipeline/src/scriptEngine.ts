@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { EnqueueVideoJobInput, GeneratedScript } from "./libInterop";
-import { createServiceSupabaseClient, getPersona } from "./libInterop";
+import { createClient } from "@supabase/supabase-js";
+
+function createServiceSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_KEY!;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: "demoforge" },
+  });
+}
 
 function buildKuzeVideoArchitectContext(input: {
   persona: { opening_line?: string | null; name?: string };
@@ -30,7 +39,6 @@ Ground claims in operational reality for workforce training orgs.`,
   };
 }
 
-
 export interface ScriptEngineInput extends EnqueueVideoJobInput {
   scriptVersion: string;
 }
@@ -57,13 +65,12 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
     .eq("id", session?.track_id as string)
     .single();
 
-  const persona = await getPersona(supabase, input.product);
   const first = prospect?.first_name ?? "";
   const last = prospect?.last_name ?? "";
   const prospectName = `${first} ${last}`.trim() || "Guest";
 
   const { system, facts: context } = buildKuzeVideoArchitectContext({
-    persona,
+    persona: { opening_line: null, name: "Kuze" },
     kuzeContext: {
       prospectName,
       organization: (prospect?.organization as string) ?? "",
@@ -71,7 +78,6 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
       painPoints: (prospect?.pain_points as string[] | null) ?? [],
       productName: input.product,
       trackName: (track?.name as string) ?? "",
-      
     },
   });
 
@@ -89,7 +95,7 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
       { id: "cta", title: "Highlight CTA", action: "wait", waitMs: 650 },
     ],
     narration: [
-      { stepId: "open", text: persona.opening_line ?? "Welcome to your personalized demo." },
+      { stepId: "open", text: "Welcome to your personalized demo." },
       { stepId: "intake", text: `Prospect context: ${context}` },
       { stepId: "module_1", text: system },
       { stepId: "cta", text: "Ready to continue with a live walkthrough and next steps." },
@@ -100,7 +106,7 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
       source: "deterministic-v1",
       personalization: {
         websiteProfile: null,
-        linkedinProfile: null,
+        linkedinProfile: null
       },
     },
   };
