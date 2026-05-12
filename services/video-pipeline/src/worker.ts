@@ -244,12 +244,24 @@ const worker = new Worker<VideoQueuePayload>(
   {
     connection: getConn(),
     concurrency: Number(process.env.VIDEO_WORKER_CONCURRENCY ?? "2"),
-    
+    enablePriorityQueue: true,
   }
 );
 
 worker.on("error", (err) => {
   console.error("[video-pipeline] worker error:", err);
+});
+
+worker.on("failed", (job, err) => {
+  console.error("[video-pipeline] job failed:", job?.id, err?.message, err?.stack);
+});
+
+worker.on("active", (job) => {
+  console.log("[video-pipeline] job active:", job.id, job.data?.sessionId);
+});
+
+worker.on("completed", (job) => {
+  console.log("[video-pipeline] job completed:", job.id);
 });
 
 console.log("[video-pipeline] worker started");
