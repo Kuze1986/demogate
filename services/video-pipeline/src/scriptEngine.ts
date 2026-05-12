@@ -71,7 +71,7 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
       painPoints: (prospect?.pain_points as string[] | null) ?? [],
       productName: input.product,
       trackName: (track?.name as string) ?? "",
-      currentModuleTitle: "Video Demo",
+      
     },
   });
 

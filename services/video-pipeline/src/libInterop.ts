@@ -18,8 +18,10 @@ import type { EnqueueVideoJobInput, GeneratedScript, RenderManifest, VideoQueueP
 
 export const { createServiceSupabaseClient } = serviceMod as typeof import("../../../lib/supabase/service");
 
-export const { VIDEO_GUARDRAILS, VIDEO_JOB_STATUS, VIDEO_QUEUE_NAMES } =
-  constantsMod as typeof import("../../../lib/video/constants");
+export const VIDEO_GUARDRAILS = (constantsMod as typeof import("../../../lib/video/constants")).VIDEO_GUARDRAILS;
+export const VIDEO_JOB_STATUS = (constantsMod as typeof import("../../../lib/video/constants")).VIDEO_JOB_STATUS;
+export const VIDEO_QUEUE_NAMES = (constantsMod as typeof import("../../../lib/video/constants")).VIDEO_QUEUE_NAMES;
+  
 
 export const { logVideoOperation } = loggingMod as typeof import("../../../lib/video/logging");
 
