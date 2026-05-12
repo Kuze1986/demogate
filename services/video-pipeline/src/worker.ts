@@ -2,10 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
-import { dispatchIntegrationEvent } from "../../../lib/integrations/index";
-import { buildCanonicalMediaPublicUrl } from "../../../lib/media/url";
-import { uploadFinalRenderToStorage } from "../../../lib/video/storage";
-import type { VideoQueuePayload } from "../../../lib/video/contracts";
+import { dispatchIntegrationEvent } from "./libInterop";
+import { buildCanonicalMediaPublicUrl } from "./libInterop";
+import { uploadFinalRenderToStorage } from "./libInterop";
+import type { VideoQueuePayload } from "./libInterop";
 import {
   createServiceSupabaseClient,
   logVideoOperation,

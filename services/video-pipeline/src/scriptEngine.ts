@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { EnqueueVideoJobInput, GeneratedScript } from "../../../lib/video/contracts";
+import type { EnqueueVideoJobInput, GeneratedScript } from "./libInterop";
 import { createServiceSupabaseClient, getPersona } from "./libInterop";
 
 function buildKuzeVideoArchitectContext(input: {

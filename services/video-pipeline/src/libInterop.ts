@@ -9,6 +9,12 @@ import * as constantsMod from "../../../lib/video/constants";
 import * as loggingMod from "../../../lib/video/logging";
 import type { DemoforgePersonaRow, DemoforgeServiceClient } from "../../../server/src/demoforge/getPersona";
 import * as personaLib from "../../../server/src/demoforge/getPersona";
+import * as crucibleMod from "../../../lib/crucible/client";
+import type { CrucibleProfileResult } from "../../../lib/crucible/client";
+import * as integrationsMod from "../../../lib/integrations/index";
+import * as mediaMod from "../../../lib/media/url";
+import * as storageMod from "../../../lib/video/storage";
+import type { EnqueueVideoJobInput, GeneratedScript, RenderManifest, VideoQueuePayload } from "../../../lib/video/contracts";
 
 export const { createServiceSupabaseClient } = serviceMod as typeof import("../../../lib/supabase/service");
 
@@ -25,3 +31,20 @@ export const { buildDemoSystemPrompt, getPersona } = personaLib as {
   buildDemoSystemPrompt: (persona: DemoforgePersonaRow) => string;
   getPersona: (supabase: DemoforgeServiceClient, productId: string) => Promise<DemoforgePersonaRow>;
 };
+
+export const fetchCrucibleBehaviorProfile = (crucibleMod as {
+  fetchCrucibleBehaviorProfile: (input: {
+    sessionId?: string;
+    correlationId: string;
+    product: string;
+    persona: string;
+  }) => Promise<CrucibleProfileResult>;
+}).fetchCrucibleBehaviorProfile;
+
+export const { dispatchIntegrationEvent } = integrationsMod as typeof import("../../../lib/integrations/index");
+
+export const { buildCanonicalMediaPublicUrl } = mediaMod as typeof import("../../../lib/media/url");
+
+export const { uploadFinalRenderToStorage } = storageMod as typeof import("../../../lib/video/storage");
+
+export type { EnqueueVideoJobInput, GeneratedScript, RenderManifest, VideoQueuePayload } from "../../../lib/video/contracts";
