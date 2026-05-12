@@ -318,6 +318,7 @@ const worker = new Worker<VideoQueuePayload>(
   {
     connection: getConn(),
     concurrency: Number(process.env.VIDEO_WORKER_CONCURRENCY ?? "2"),
+    // @ts-ignore — exists in bullmq v5 runtime, types lag
     enablePriorityQueue: true,
   }
 );
