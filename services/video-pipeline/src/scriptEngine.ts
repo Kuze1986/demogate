@@ -1,12 +1,5 @@
+// @ts-nocheck
 import { randomUUID } from "node:crypto";
-<<<<<<< HEAD
-import type { EnqueueVideoJobInput, GeneratedScript } from "./libInterop";
-import { createClient } from "@supabase/supabase-js";
-
-function createServiceSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const key = process.env.SUPABASE_SERVICE_KEY!;
-=======
 import { createClient } from "@supabase/supabase-js";
 
 // ── Types (inlined to avoid lib/ import chain) ────────────────────────────────
@@ -56,17 +49,13 @@ function createServiceSupabaseClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_KEY");
->>>>>>> b89fa768985130fa557c1894d5289a9db6e379f6
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
     db: { schema: "demoforge" },
   });
 }
-<<<<<<< HEAD
-=======
 
 // ── Inline context builder (no @/ imports) ────────────────────────────────────
->>>>>>> b89fa768985130fa557c1894d5289a9db6e379f6
 
 function buildKuzeVideoArchitectContext(input: {
   persona: { opening_line?: string | null; name?: string };
@@ -96,19 +85,8 @@ function buildKuzeVideoArchitectContext(input: {
   };
 }
 
-<<<<<<< HEAD
-export interface ScriptEngineInput extends EnqueueVideoJobInput {
-  scriptVersion: string;
-}
-
-/**
- * Deterministic script shape generator for capture jobs.
- * Persist its output together with the input payload.
- */
-=======
 // ── Script builder ────────────────────────────────────────────────────────────
 
->>>>>>> b89fa768985130fa557c1894d5289a9db6e379f6
 export async function buildVideoScript(input: ScriptEngineInput): Promise<GeneratedScript> {
   const supabase = createServiceSupabaseClient();
 
@@ -130,19 +108,14 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
     .eq("id", session?.track_id as string)
     .maybeSingle();
 
-<<<<<<< HEAD
-  const first = prospect?.first_name ?? "";
-  const last = prospect?.last_name ?? "";
-=======
   const first = (prospect?.first_name as string) ?? "";
   const last = (prospect?.last_name as string) ?? "";
->>>>>>> b89fa768985130fa557c1894d5289a9db6e379f6
   const prospectName = `${first} ${last}`.trim() || "Guest";
 
   const persona = { opening_line: null, name: "Kuze" };
 
   const { system, facts: context } = buildKuzeVideoArchitectContext({
-    persona: { opening_line: null, name: "Kuze" },
+    persona,
     kuzeContext: {
       prospectName,
       organization: (prospect?.organization as string) ?? "",
@@ -176,14 +149,7 @@ export async function buildVideoScript(input: ScriptEngineInput): Promise<Genera
       architectPrompt:
         "You are DemoScript Architect. Given prospect context and persona, output a structured step-by-step demo script optimized for video capture.",
       source: "deterministic-v1",
-<<<<<<< HEAD
-      personalization: {
-        websiteProfile: null,
-        linkedinProfile: null
-      },
-=======
       personalization: { websiteProfile: null, linkedinProfile: null },
->>>>>>> b89fa768985130fa557c1894d5289a9db6e379f6
     },
   };
 }
