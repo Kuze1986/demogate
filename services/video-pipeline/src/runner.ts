@@ -1,8 +1,8 @@
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type BrowserContext, type Page } from "@playwright/test";
-import { fetchCrucibleBehaviorProfile } from "./libInterop";
-import type { GeneratedScript, RenderManifest } from "./libInterop";
+import { fetchCrucibleBehaviorProfile } from "../../../lib/crucible/client";
+import type { GeneratedScript, RenderManifest } from "../../../lib/video/contracts";
 import { hoverWobble, humanDelay, moveMouseBezier, thinkingPause } from "./humanBehavior";
 
 export async function runCapture(script: GeneratedScript): Promise<{
