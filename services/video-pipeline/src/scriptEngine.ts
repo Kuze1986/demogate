@@ -1,7 +1,35 @@
 import { randomUUID } from "node:crypto";
 import type { EnqueueVideoJobInput, GeneratedScript } from "../../../lib/video/contracts";
 import { createServiceSupabaseClient, getPersona } from "./libInterop";
-import { buildKuzeVideoArchitectContext } from "../../../lib/kuze/assembly";
+
+function buildKuzeVideoArchitectContext(input: {
+  persona: { opening_line?: string | null; name?: string };
+  kuzeContext: {
+    prospectName: string;
+    organization: string;
+    role: string;
+    painPoints: string[];
+    productName: string;
+    trackName: string;
+  };
+}): { system: string; facts: string } {
+  return {
+    system: `You are Kuze, an AI demo agent for ${input.kuzeContext.productName}. 
+Voice: direct, surgical, never performative. 
+Ground claims in operational reality for workforce training orgs.`,
+    facts: [
+      `Prospect: ${input.kuzeContext.prospectName}`,
+      `Organization: ${input.kuzeContext.organization}`,
+      `Role: ${input.kuzeContext.role}`,
+      `Product: ${input.kuzeContext.productName}`,
+      `Track: ${input.kuzeContext.trackName}`,
+      input.kuzeContext.painPoints.length 
+        ? `Pain points: ${input.kuzeContext.painPoints.join(", ")}` 
+        : "",
+    ].filter(Boolean).join("\n"),
+  };
+}
+
 
 export interface ScriptEngineInput extends EnqueueVideoJobInput {
   scriptVersion: string;
