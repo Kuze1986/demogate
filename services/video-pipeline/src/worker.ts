@@ -107,12 +107,16 @@ async function hoverWobble(page, at, t) {
 // ── Script builder ────────────────────────────────────────────────────────────
 
 async function buildScript(payload) {
-  const supabase    = db();
+  const supabase      = db();
   const correlationId = payload.correlationId ?? randomUUID();
 
   const { data: session }  = await supabase.from("demo_sessions").select("id,track_id,prospect_id").eq("id", payload.sessionId).maybeSingle();
   const { data: prospect } = await supabase.from("prospects").select("first_name,last_name,organization,role,pain_points").eq("id", session?.prospect_id ?? "x").maybeSingle();
   const { data: track }    = await supabase.from("demo_tracks").select("name,product").eq("id", session?.track_id ?? "x").maybeSingle();
+
+  const shiftUrl  = "https://the-shift.up.railway.app";
+  const email     = process.env.SHIFT_DEMO_EMAIL ?? "kuze@theshift.gg";
+  const password  = process.env.SHIFT_DEMO_PW ?? "";
 
   return {
     correlationId,
@@ -123,10 +127,24 @@ async function buildScript(payload) {
     prospectName:  [`${prospect?.first_name ?? ""}`, `${prospect?.last_name ?? ""}`].join(" ").trim() || "Guest",
     trackName:     track?.name ?? "",
     steps: [
-      { id: "open",     action: "navigate", value: "/demo",   title: "Open demo"      },
-      { id: "pause_1",  action: "wait",     waitMs: 1200,     title: "Page load"      },
-      { id: "scroll_1", action: "wait",     waitMs: 2000,     title: "Show content"   },
-      { id: "cta",      action: "wait",     waitMs: 800,      title: "Highlight CTA"  },
+      // Auth
+      { id: "login",      action: "navigate", value: `${shiftUrl}/login`,        title: "Open login"        },
+      { id: "email",      action: "type",     selector: "input[type=\'email\']",    value: email, title: "Enter email" },
+      { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
+      { id: "submit",     action: "click",    selector: "button[type=\'submit\']",  title: "Submit login"      },
+      { id: "wait_auth",  action: "wait",     waitMs: 3000,                        title: "Wait for auth"     },
+      // Home dashboard
+      { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
+      { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
+      // War Plans / Mission Table
+      { id: "war_plans",  action: "navigate", value: `${shiftUrl}/MissionTable`,   title: "War Plans"         },
+      { id: "hold_plans", action: "wait",     waitMs: 4000,                        title: "Show War Plans"    },
+      // Boss Fight
+      { id: "boss",       action: "navigate", value: `${shiftUrl}/BossFight`,      title: "Boss Fight"        },
+      { id: "hold_boss",  action: "wait",     waitMs: 5000,                        title: "Show Boss Fight"   },
+      // Back to home for outro
+      { id: "outro",      action: "navigate", value: `${shiftUrl}/home`,           title: "Outro"             },
+      { id: "hold_outro", action: "wait",     waitMs: 2000,                        title: "Hold outro"        },
     ],
   };
 }
