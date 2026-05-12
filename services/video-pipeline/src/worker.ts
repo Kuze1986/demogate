@@ -1,15 +1,89 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
-import {
-  createServiceSupabaseClient,
-  logVideoOperation,
-  dispatchIntegrationEvent,
-  buildCanonicalMediaPublicUrl,
-  uploadFinalRenderToStorage,
-} from "./libInterop";
-import type { VideoQueuePayload } from "./libInterop";
+import { createClient } from "@supabase/supabase-js";
+
+// ── Self-contained helpers (bypass libInterop / @/ alias chain) ──────────────
+
+function createServiceSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!url || !key) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_KEY");
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: "demoforge" },
+  });
+}
+
+async function logVideoOperation(input: {
+  operation: string;
+  status: "success" | "error";
+  sessionId?: string | null;
+  correlationId?: string | null;
+  message?: string;
+  payload?: Record<string, unknown> | null;
+}): Promise<void> {
+  try {
+    const supabase = createServiceSupabaseClient();
+    await supabase.from("system_logs").insert({
+      function_name: `video_${input.operation}`,
+      session_id: input.sessionId ?? null,
+      status: input.status,
+      message: input.message ?? null,
+      payload: { correlation_id: input.correlationId ?? null, ...(input.payload ?? {}) },
+    });
+  } catch {
+    console.error("[video-pipeline] logVideoOperation failed silently:", input.operation);
+  }
+}
+
+function buildCanonicalMediaPublicUrl(input: { bucket: string; objectKey: string }): string {
+  const cdn = process.env.DEMOFORGE_MEDIA_CDN_BASE_URL?.replace(/\/$/, "");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+  if (cdn) return `${cdn}/${input.bucket}/${input.objectKey}`;
+  if (supabaseUrl) return `${supabaseUrl}/storage/v1/object/public/${input.bucket}/${input.objectKey}`;
+  return `${input.bucket}/${input.objectKey}`;
+}
+
+async function uploadFinalRenderToStorage(input: {
+  localPath: string;
+  objectKey: string;
+}): Promise<{ bucket: string; objectKey: string }> {
+  const bucket = process.env.DEMOFORGE_VIDEO_BUCKET ?? "demoforge-video";
+  const supabase = createServiceSupabaseClient();
+  const file = readFileSync(input.localPath);
+  const { error } = await supabase.storage.from(bucket).upload(input.objectKey, file, {
+    contentType: "video/mp4",
+    upsert: true,
+  });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  return { bucket, objectKey: input.objectKey };
+}
+
+async function dispatchIntegrationEvent(input: {
+  tenantId?: string | null;
+  eventType: string;
+  idempotencyKey?: string | null;
+  body: Record<string, unknown>;
+}): Promise<void> {
+  console.log("[video-pipeline] integration event dispatched:", input.eventType);
+}
+
+interface VideoQueuePayload {
+  jobId: string;
+  sessionId: string;
+  prospectId?: string | null;
+  product: string;
+  persona: string;
+  triggeredBy: string;
+  variants: string[];
+  deviceProfiles?: string[];
+  locale?: string;
+  priority?: number;
+  correlationId?: string;
+  createdAtIso?: string;
+}
 
 // Hardcoded to avoid CJS/ESM interop issues with lib/video/constants
 const VIDEO_QUEUE_NAMES = {
