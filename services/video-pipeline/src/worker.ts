@@ -132,7 +132,7 @@ async function buildScript(payload) {
       { id: "email",      action: "type",     selector: "input[type=\'email\']",    value: email, title: "Enter email" },
       { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
       { id: "submit",     action: "keyboard",  key: "Enter",                           title: "Submit login"      },
-      { id: "wait_auth",  action: "wait",     waitMs: 3000,                        title: "Wait for auth"     },
+      { id: "wait_auth",  action: "wait",     waitMs: 5000,                        title: "Wait for auth"     },
       // Home dashboard
       { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
       { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
@@ -184,7 +184,8 @@ async function runCapture(jobId, script) {
         await thinkingPause(behavior.profile);
         await loc.click();
       } else if (step.action === "type" && step.selector) {
-        await page.fill(step.selector, step.value ?? "");
+        await page.locator(step.selector).click();
+        await page.locator(step.selector).pressSequentially(step.value ?? "", { delay: 60 });
       } else if (step.action === "keyboard" && step.key) {
         await page.keyboard.press(step.key);
       } else {
