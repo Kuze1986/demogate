@@ -133,19 +133,19 @@ async function buildScript(payload) {
       { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
       { id: "submit",     action: "clickText",  value: "SIGN IN WITH PASSWORD",          title: "Submit login"      },
       { id: "wait_auth",  action: "waitForURL", value: "login",               title: "Wait for auth"     },
-      { id: "settle",     action: "wait",     waitMs: 2000,                        title: "Settle dashboard"  },
+      { id: "settle",     action: "wait",     waitMs: 4000,                        title: "Settle dashboard"  },
       // Home dashboard
       { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
-      { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
+      { id: "hold_home",  action: "wait",     waitMs: 6000,                        title: "Show dashboard"    },
       // War Plans / Mission Table
       { id: "war_plans",  action: "navigate", value: `${shiftUrl}/MissionTable`,   title: "War Plans"         },
-      { id: "hold_plans", action: "wait",     waitMs: 4000,                        title: "Show War Plans"    },
+      { id: "hold_plans", action: "wait",     waitMs: 7000,                        title: "Show War Plans"    },
       // Boss Fight
       { id: "boss",       action: "navigate", value: `${shiftUrl}/BossFight`,      title: "Boss Fight"        },
-      { id: "hold_boss",  action: "wait",     waitMs: 5000,                        title: "Show Boss Fight"   },
+      { id: "hold_boss",  action: "wait",     waitMs: 10000,                       title: "Show Boss Fight"   },
       // Back to home for outro
       { id: "outro",      action: "navigate", value: `${shiftUrl}/home`,           title: "Outro"             },
-      { id: "hold_outro", action: "wait",     waitMs: 2000,                        title: "Hold outro"        },
+      { id: "hold_outro", action: "wait",     waitMs: 4000,                        title: "Hold outro"        },
     ],
   };
 }
@@ -173,7 +173,7 @@ async function runCapture(jobId, script) {
     for (const step of script.steps) {
       const t0 = (Date.now() - startedAt) / 1000;
       if (step.action === "navigate" && step.value) {
-        await page.goto(step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`, { waitUntil: "domcontentloaded" });
+        await page.goto(step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`, { waitUntil: "load", timeout: 30000 });
       } else if (step.action === "click" && step.selector) {
         const loc = page.locator(step.selector);
         await loc.scrollIntoViewIfNeeded();
