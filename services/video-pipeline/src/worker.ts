@@ -133,19 +133,19 @@ async function buildScript(payload) {
       { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
       { id: "submit",     action: "clickText",  value: "SIGN IN WITH PASSWORD",          title: "Submit login"      },
       { id: "wait_auth",  action: "waitForURL", value: "login",               title: "Wait for auth"     },
-      { id: "settle",     action: "wait",     waitMs: 4000,                        title: "Settle dashboard"  },
+      { id: "settle",     action: "wait",     waitMs: 1500,                        title: "Settle dashboard"  },
       // Home dashboard
       { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
-      { id: "hold_home",  action: "wait",     waitMs: 6000,                        title: "Show dashboard"    },
+      { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
       // War Plans / Mission Table
       { id: "war_plans",  action: "navigate", value: `${shiftUrl}/MissionTable`,   title: "War Plans"         },
-      { id: "hold_plans", action: "wait",     waitMs: 7000,                        title: "Show War Plans"    },
+      { id: "hold_plans", action: "wait",     waitMs: 3000,                        title: "Show War Plans"    },
       // Boss Fight
       { id: "boss",       action: "navigate", value: `${shiftUrl}/BossFight`,      title: "Boss Fight"        },
-      { id: "hold_boss",  action: "wait",     waitMs: 10000,                       title: "Show Boss Fight"   },
+      { id: "hold_boss",  action: "wait",     waitMs: 3000,                        title: "Show Boss Fight"   },
       // Back to home for outro
       { id: "outro",      action: "navigate", value: `${shiftUrl}/home`,           title: "Outro"             },
-      { id: "hold_outro", action: "wait",     waitMs: 4000,                        title: "Hold outro"        },
+      { id: "hold_outro", action: "wait",     waitMs: 2000,                        title: "Hold outro"        },
     ],
   };
 }
@@ -160,6 +160,13 @@ async function runCapture(jobId, script) {
   const behavior = await fetchBehaviorProfile(script.correlationId, script.product, script.persona);
   const appUrl   = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
 
+  // Pre-warm The Shift so Railway container is hot before Playwright starts
+  const shiftBaseUrl = "https://the-shift.up.railway.app";
+  console.log("[worker] pre-warming The Shift...");
+  await fetch(shiftBaseUrl, { signal: AbortSignal.timeout(15000) }).catch(() => {});
+  await fetch(`${shiftBaseUrl}/login`, { signal: AbortSignal.timeout(10000) }).catch(() => {});
+  console.log("[worker] pre-warm done");
+
   const browser  = await chromium.launch({ headless: true });
   const context  = await browser.newContext({
     viewport:    script.deviceProfile === "mobile" ? { width: 390, height: 844 } : { width: 1440, height: 900 },
@@ -173,7 +180,7 @@ async function runCapture(jobId, script) {
     for (const step of script.steps) {
       const t0 = (Date.now() - startedAt) / 1000;
       if (step.action === "navigate" && step.value) {
-        await page.goto(step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`, { waitUntil: "load", timeout: 30000 });
+        await page.goto(step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`, { waitUntil: "networkidle", timeout: 45000 });
       } else if (step.action === "click" && step.selector) {
         const loc = page.locator(step.selector);
         await loc.scrollIntoViewIfNeeded();
