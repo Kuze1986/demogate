@@ -132,7 +132,8 @@ async function buildScript(payload) {
       { id: "email",      action: "type",     selector: "input[type=\'email\']",    value: email, title: "Enter email" },
       { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
       { id: "submit",     action: "keyboard",  key: "Enter",                           title: "Submit login"      },
-      { id: "wait_auth",  action: "wait",     waitMs: 5000,                        title: "Wait for auth"     },
+      { id: "wait_auth",  action: "waitForURL", value: "login",               title: "Wait for auth"     },
+      { id: "settle",     action: "wait",     waitMs: 2000,                        title: "Settle dashboard"  },
       // Home dashboard
       { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
       { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
@@ -188,6 +189,8 @@ async function runCapture(jobId, script) {
         await page.locator(step.selector).pressSequentially(step.value ?? "", { delay: 60 });
       } else if (step.action === "keyboard" && step.key) {
         await page.keyboard.press(step.key);
+      } else if (step.action === "waitForURL" && step.value) {
+        await page.waitForURL(url => !url.includes(step.value), { timeout: 15000 }).catch(() => {});
       } else {
         await humanDelay(step.waitMs ?? 500, behavior.profile);
       }
