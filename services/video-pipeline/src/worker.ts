@@ -131,7 +131,7 @@ async function buildScript(payload) {
       { id: "login",      action: "navigate", value: `${shiftUrl}/login`,        title: "Open login"        },
       { id: "email",      action: "type",     selector: "input[type=\'email\']",    value: email, title: "Enter email" },
       { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
-      { id: "submit",     action: "click",    selector: "button[type=\'submit\']",  title: "Submit login"      },
+      { id: "submit",     action: "keyboard",  key: "Enter",                           title: "Submit login"      },
       { id: "wait_auth",  action: "wait",     waitMs: 3000,                        title: "Wait for auth"     },
       // Home dashboard
       { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
@@ -185,6 +185,8 @@ async function runCapture(jobId, script) {
         await loc.click();
       } else if (step.action === "type" && step.selector) {
         await page.fill(step.selector, step.value ?? "");
+      } else if (step.action === "keyboard" && step.key) {
+        await page.keyboard.press(step.key);
       } else {
         await humanDelay(step.waitMs ?? 500, behavior.profile);
       }
