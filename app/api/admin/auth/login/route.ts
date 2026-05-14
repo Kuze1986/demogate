@@ -74,19 +74,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Create a session without requiring the Supabase password
-  const { data: sessionData, error: sessionError } =
-    await svc.auth.admin.createSession({ user_id: adminUser.id });
-  if (sessionError || !sessionData?.session) {
+  // Sync the Supabase user's password with ADMIN_PASSWORD so signInWithPassword works
+  const { error: updateError } = await svc.auth.admin.updateUserById(
+    adminUser.id,
+    { password: adminPassword }
+  );
+  if (updateError) {
     return NextResponse.json(
-      { error: "Failed to create session" },
+      { error: "Failed to prepare admin session" },
       { status: 500 }
     );
   }
 
   const response = NextResponse.json({ ok: true });
 
-  // Persist the session in the standard Supabase SSR cookies
+  // Sign in via SSR client so session cookies are set on the response
   const cookieClient = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -104,10 +106,13 @@ export async function POST(req: NextRequest) {
     }
   );
 
-  await cookieClient.auth.setSession({
-    access_token: sessionData.session.access_token,
-    refresh_token: sessionData.session.refresh_token,
+  const { error: signInError } = await cookieClient.auth.signInWithPassword({
+    email: adminEmail,
+    password: adminPassword,
   });
+  if (signInError) {
+    return NextResponse.json({ error: signInError.message }, { status: 500 });
+  }
 
   return response;
 }
