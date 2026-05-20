@@ -48,8 +48,9 @@ export interface RenderManifest {
 export interface EnqueueVideoJobInput {
   sessionId: string;
   prospectId?: string | null;
-  product: ProductKey;
-  persona: ProspectPersona;
+  /** Required for legacy NEXUS product routing; omit when scriptTemplateId is provided */
+  product?: ProductKey;
+  persona?: ProspectPersona;
   triggeredBy: "intake" | "manual" | "post_live";
   variants: VideoVariantType[];
   priority?: number;
