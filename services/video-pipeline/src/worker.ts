@@ -13,6 +13,7 @@ import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { createClient } from "@supabase/supabase-js";
 import { chromium } from "@playwright/test";
+import { buildGeneratedScript } from "./script-generator.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -104,52 +105,6 @@ async function hoverWobble(page, at, t) {
   await page.mouse.move(at.x + jitter(-w/2, w/2), at.y + jitter(-w/2, w/2));
 }
 
-// ── Script builder ────────────────────────────────────────────────────────────
-
-async function buildScript(payload) {
-  const supabase      = db();
-  const correlationId = payload.correlationId ?? randomUUID();
-
-  const { data: session }  = await supabase.from("demo_sessions").select("id,track_id,prospect_id").eq("id", payload.sessionId).maybeSingle();
-  const { data: prospect } = await supabase.from("prospects").select("first_name,last_name,organization,role,pain_points").eq("id", session?.prospect_id ?? "x").maybeSingle();
-  const { data: track }    = await supabase.from("demo_tracks").select("name,product").eq("id", session?.track_id ?? "x").maybeSingle();
-
-  const shiftUrl  = "https://the-shift.up.railway.app";
-  const email     = process.env.SHIFT_DEMO_EMAIL ?? "kuze@theshift.gg";
-  const password  = process.env.SHIFT_DEMO_PW ?? "";
-
-  return {
-    correlationId,
-    product:       track?.product ?? payload.product,
-    persona:       payload.persona,
-    locale:        payload.locale ?? "en",
-    deviceProfile: payload.deviceProfiles?.[0] ?? "desktop",
-    prospectName:  [`${prospect?.first_name ?? ""}`, `${prospect?.last_name ?? ""}`].join(" ").trim() || "Guest",
-    trackName:     track?.name ?? "",
-    steps: [
-      // Auth
-      { id: "login",      action: "navigate", value: `${shiftUrl}/login`,        title: "Open login"        },
-      { id: "email",      action: "type",     selector: "input[type=\'email\']",    value: email, title: "Enter email" },
-      { id: "password",   action: "type",     selector: "input[type=\'password\']", value: password, title: "Enter password" },
-      { id: "submit",     action: "clickText",  value: "SIGN IN WITH PASSWORD",          title: "Submit login"      },
-      { id: "wait_auth",  action: "waitForURL", value: "login",               title: "Wait for auth"     },
-      { id: "settle",     action: "wait",     waitMs: 1500,                        title: "Settle dashboard"  },
-      // Home dashboard
-      { id: "home",       action: "navigate", value: `${shiftUrl}/home`,           title: "Dashboard"         },
-      { id: "hold_home",  action: "wait",     waitMs: 3000,                        title: "Show dashboard"    },
-      // War Plans / Mission Table
-      { id: "war_plans",  action: "navigate", value: `${shiftUrl}/MissionTable`,   title: "War Plans"         },
-      { id: "hold_plans", action: "wait",     waitMs: 3000,                        title: "Show War Plans"    },
-      // Boss Fight
-      { id: "boss",       action: "navigate", value: `${shiftUrl}/BossFight`,      title: "Boss Fight"        },
-      { id: "hold_boss",  action: "wait",     waitMs: 3000,                        title: "Show Boss Fight"   },
-      // Back to home for outro
-      { id: "outro",      action: "navigate", value: `${shiftUrl}/home`,           title: "Outro"             },
-      { id: "hold_outro", action: "wait",     waitMs: 2000,                        title: "Hold outro"        },
-    ],
-  };
-}
-
 // ── Playwright capture ────────────────────────────────────────────────────────
 
 async function runCapture(jobId, script) {
@@ -160,12 +115,12 @@ async function runCapture(jobId, script) {
   const behavior = await fetchBehaviorProfile(script.correlationId, script.product, script.persona);
   const appUrl   = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
 
-  // Pre-warm The Shift so Railway container is hot before Playwright starts
-  const shiftBaseUrl = "https://the-shift.up.railway.app";
-  console.log("[worker] pre-warming The Shift...");
-  await fetch(shiftBaseUrl, { signal: AbortSignal.timeout(15000) }).catch(() => {});
-  await fetch(`${shiftBaseUrl}/login`, { signal: AbortSignal.timeout(10000) }).catch(() => {});
-  console.log("[worker] pre-warm done");
+  // Pre-warm base URL if it's a remote host
+  if (script.baseUrl && script.baseUrl.startsWith("http")) {
+    console.log(`[worker] pre-warming ${script.baseUrl}...`);
+    await fetch(script.baseUrl, { signal: AbortSignal.timeout(15000) }).catch(() => {});
+    console.log("[worker] pre-warm done");
+  }
 
   const browser  = await chromium.launch({ headless: true });
   const context  = await browser.newContext({
@@ -179,8 +134,18 @@ async function runCapture(jobId, script) {
   try {
     for (const step of script.steps) {
       const t0 = (Date.now() - startedAt) / 1000;
+
+      // Calculate wait time: use narration estimated seconds if available
+      const narrationCue = script.narration?.find(c => c.stepId === step.id);
+      const narrationWaitMs = narrationCue ? Math.round(narrationCue.estimatedSeconds * 1000) : 0;
+
       if (step.action === "navigate" && step.value) {
-        await page.goto(step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`, { waitUntil: "networkidle", timeout: 45000 });
+        const url = step.value.startsWith("http") ? step.value : `${appUrl}${step.value}`;
+        await page.goto(url, { waitUntil: "networkidle", timeout: 45000 });
+        // Hold on navigated page for the narration duration
+        if (narrationWaitMs > 1500) {
+          await humanDelay(Math.max(0, narrationWaitMs - 1500), behavior.profile);
+        }
       } else if (step.action === "click" && step.selector) {
         const loc = page.locator(step.selector);
         await loc.scrollIntoViewIfNeeded();
@@ -201,7 +166,9 @@ async function runCapture(jobId, script) {
       } else if (step.action === "waitForURL" && step.value) {
         await page.waitForURL(url => !url.includes(step.value), { timeout: 15000 }).catch(() => {});
       } else {
-        await humanDelay(step.waitMs ?? 500, behavior.profile);
+        // For explicit wait steps, use the longer of waitMs or narration time
+        const waitMs = Math.max(step.waitMs ?? 500, narrationWaitMs || 0);
+        await humanDelay(waitMs, behavior.profile);
       }
       timestamps.push({ stepId: step.id, startSeconds: t0, endSeconds: (Date.now() - startedAt) / 1000 });
     }
@@ -210,27 +177,101 @@ async function runCapture(jobId, script) {
     await browser.close();
   }
 
-  const files   = readdirSync(videoDir);
+  const files    = readdirSync(videoDir);
   const webmFile = files.find(f => f.endsWith(".webm"));
   const rawVideoPath = join(outDir, "capture.webm");
   if (webmFile) copyFileSync(join(videoDir, webmFile), rawVideoPath);
   writeFileSync(join(outDir, "timeline.json"), JSON.stringify(timestamps, null, 2));
 
+  const appUrlBase = appUrl || process.env.NEXT_PUBLIC_APP_URL || "";
   return {
     rawVideoPath,
     manifest: {
       correlationId: script.correlationId,
-      scriptVersion: "v1",
+      scriptVersion: "v2",
       stepTimestamps: timestamps,
       hotspots: [{
-        label:          "Jump to live Kuze",
+        label:          "View live demo",
         startSeconds:   timestamps[0]?.startSeconds ?? 0,
         endSeconds:     Math.max(5, timestamps[0]?.endSeconds ?? 5),
-        targetUrl:      `${appUrl}/demo`,
+        targetUrl:      `${appUrlBase}/intake`,
         contextPayload: { source: "video_hotspot", correlationId: script.correlationId, behavior_source: behavior.source },
       }],
     },
   };
+}
+
+// ── ElevenLabs TTS synthesis ──────────────────────────────────────────────────
+
+function toneToVoiceSettings(tone) {
+  switch (tone) {
+    case "confident": return { stability: 0.55, similarity_boost: 0.8,  style: 0.2,  use_speaker_boost: true  };
+    case "urgent":    return { stability: 0.35, similarity_boost: 0.85, style: 0.45, use_speaker_boost: true  };
+    case "friendly":  return { stability: 0.65, similarity_boost: 0.75, style: 0.1,  use_speaker_boost: false };
+    default:          return { stability: 0.7,  similarity_boost: 0.75, style: 0.0,  use_speaker_boost: false };
+  }
+}
+
+async function synthesizeCue(text, voiceId, tone) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not set");
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method:  "POST",
+    headers: { "xi-api-key": apiKey, "Content-Type": "application/json", "Accept": "audio/mpeg" },
+    body:    JSON.stringify({ text, model_id: "eleven_turbo_v2", voice_settings: toneToVoiceSettings(tone) }),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(`ElevenLabs TTS failed (${res.status}): ${msg}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Generate and write narration MP3 for all narration cues.
+ * Returns total estimated audio duration in seconds.
+ */
+async function synthesizeNarration(narrationCues, voiceId, narrationPath) {
+  if (!narrationCues || narrationCues.length === 0) {
+    writeFileSync(narrationPath, "");
+    return 0;
+  }
+  if (!process.env.ELEVENLABS_API_KEY) {
+    console.warn("[worker] ELEVENLABS_API_KEY not set — skipping TTS, video will be silent");
+    writeFileSync(narrationPath, "");
+    return 0;
+  }
+  const resolvedVoiceId = voiceId ?? process.env.ELEVENLABS_DEFAULT_VOICE_ID;
+  if (!resolvedVoiceId) {
+    console.warn("[worker] No voice ID configured — skipping TTS");
+    writeFileSync(narrationPath, "");
+    return 0;
+  }
+
+  console.log(`[worker] synthesizing narration: ${narrationCues.length} cues, voice=${resolvedVoiceId}`);
+
+  const buffers = [];
+  let totalEstimatedSeconds = 0;
+  for (const cue of narrationCues) {
+    if (!cue.text?.trim()) continue;
+    try {
+      const buf = await synthesizeCue(cue.text, resolvedVoiceId, cue.tone ?? "neutral");
+      buffers.push(buf);
+      totalEstimatedSeconds += cue.estimatedSeconds ?? 5;
+    } catch (err) {
+      console.error(`[worker] TTS failed for cue ${cue.stepId}:`, err.message);
+    }
+  }
+
+  if (buffers.length === 0) {
+    writeFileSync(narrationPath, "");
+    return 0;
+  }
+
+  const combined = Buffer.concat(buffers);
+  writeFileSync(narrationPath, combined);
+  console.log(`[worker] narration written: ${combined.length} bytes, ~${totalEstimatedSeconds}s`);
+  return totalEstimatedSeconds;
 }
 
 // ── FFmpeg post-process ───────────────────────────────────────────────────────
@@ -267,45 +308,157 @@ async function notify(event, correlationId, videoJobId, payload) {
   await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event, correlationId, videoJobId, payload }) }).catch(() => {});
 }
 
+// ── Post-render: send "video ready" email to prospect ────────────────────────
+
+async function sendVideoReadyNotification(renderId, sessionId, tenantId, accessToken) {
+  try {
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+    const videoUrl = `${appUrl}/watch/${renderId}?token=${accessToken}`;
+
+    const supabase = db();
+    const { data: session } = await supabase
+      .from("demo_sessions")
+      .select("prospect_id")
+      .eq("id", sessionId)
+      .maybeSingle();
+
+    const { data: prospect } = session?.prospect_id
+      ? await supabase
+          .from("prospects")
+          .select("first_name,last_name,email")
+          .eq("id", session.prospect_id)
+          .maybeSingle()
+      : { data: null };
+
+    const { data: tenant } = tenantId
+      ? await supabase
+          .from("tenants")
+          .select("name,logo_url")
+          .eq("id", tenantId)
+          .maybeSingle()
+      : { data: null };
+
+    if (!prospect?.email) return;
+
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) return;
+
+    const firstName = prospect.first_name ?? "there";
+    const tenantName = tenant?.name ?? "DemoForge";
+    const fromEmail = process.env.RESEND_FROM_EMAIL ?? "demos@demoforge.app";
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /></head>
+<body style="font-family:sans-serif;background:#0f0f0f;color:#e5e7eb;padding:40px 20px;margin:0">
+  <div style="max-width:520px;margin:0 auto">
+    ${tenant?.logo_url ? `<img src="${tenant.logo_url}" alt="${tenantName}" height="36" style="margin-bottom:24px" />` : `<h2 style="color:#6366f1;margin:0 0 24px">${tenantName}</h2>`}
+    <h1 style="color:#f9fafb;font-size:24px;margin:0 0 12px">Your personalized demo is ready</h1>
+    <p style="color:#9ca3af;line-height:1.6;margin:0 0 32px">
+      Hi ${firstName}, your AI-narrated product demo has been generated just for you. Click below to watch it.
+    </p>
+    <a href="${videoUrl}" style="display:inline-block;background:#6366f1;color:#fff;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:8px;font-size:15px">
+      Watch your demo &rarr;
+    </a>
+    <p style="color:#6b7280;font-size:12px;margin-top:40px">
+      This link is unique to you. Powered by ${tenantName}.
+    </p>
+  </div>
+</body>
+</html>`.trim();
+
+    await fetch("https://api.resend.com/emails", {
+      method:  "POST",
+      headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        from:    fromEmail,
+        to:      [prospect.email],
+        subject: `Your ${tenantName} demo is ready to watch`,
+        html,
+      }),
+    });
+    console.log(`[worker] video-ready email sent to ${prospect.email}`);
+  } catch (err) {
+    console.error("[worker] video-ready email failed:", err.message);
+  }
+}
+
 // ── Main job processor ────────────────────────────────────────────────────────
 
 async function processJob(payload) {
   const supabase  = db();
   const { jobId, sessionId, variants = ["default"], deviceProfiles = ["desktop"] } = payload;
+  const tenantId  = payload.tenantId ?? null;
   const startedAt = Date.now();
 
-  console.log(`[worker] job started: ${jobId} session=${sessionId}`);
+  console.log(`[worker] job started: ${jobId} session=${sessionId} tenant=${tenantId ?? "legacy"}`);
   await supabase.from("video_jobs").update({ status: "running", updated_at: new Date().toISOString() }).eq("id", jobId);
   await notify("job_started", payload.correlationId ?? "", jobId, {});
 
-  const script = await buildScript(payload);
+  // 1. Build script (LLM-generated narration + template steps)
+  const script = await buildGeneratedScript({ ...payload });
+  const voiceId = script.voiceId ?? payload.voiceId;
   const tmpDir = join(process.cwd(), "tmp", "video-jobs", jobId);
   mkdirSync(tmpDir, { recursive: true });
-  writeFileSync(join(tmpDir, "script.json"), JSON.stringify(script, null, 2));
-  console.log(`[worker] script ready: product=${script.product} prospect="${script.prospectName}"`);
+  writeFileSync(join(tmpDir, "script.json"), JSON.stringify({ ...script, voiceId }, null, 2));
+  console.log(`[worker] script ready: product=${script.product} prospect="${script.prospectName}" narration=${script.narration.length} cues`);
 
-  console.log(`[worker] playwright capture starting`);
+  // 2. Playwright screen capture (wait times adjusted to narration timing)
+  console.log("[worker] playwright capture starting");
   const { rawVideoPath, manifest } = await runCapture(jobId, script);
   console.log(`[worker] capture done: ${rawVideoPath}`);
 
+  // 3. TTS synthesis (ElevenLabs) — writes narration.mp3 or empty file
   const narrationPath = join(tmpDir, "narration.mp3");
   const outputPath    = join(tmpDir, "final.mp4");
-  writeFileSync(narrationPath, "");
-  console.log(`[worker] ffmpeg starting`);
+  await synthesizeNarration(script.narration, voiceId, narrationPath);
+
+  // 4. FFmpeg merge video + audio
+  console.log("[worker] ffmpeg starting");
   await runFfmpeg(rawVideoPath, narrationPath, outputPath);
   console.log(`[worker] ffmpeg done: ${outputPath}`);
+
+  // 5. Write render records and upload
+  let firstRenderId = null;
+  let firstAccessToken = null;
 
   for (const variantType of (variants.length ? variants : ["default"])) {
     for (const device of (deviceProfiles.length ? deviceProfiles : ["desktop"])) {
       const { data: variant } = await supabase.from("video_variants")
-        .insert({ video_job_id: jobId, variant_type: variantType, variant_label: `Auto ${variantType}/${device}`, locale: payload.locale ?? "en", device_profile: device })
+        .insert({
+          video_job_id:  jobId,
+          variant_type:  variantType,
+          variant_label: `Auto ${variantType}/${device}`,
+          locale:        payload.locale ?? "en",
+          device_profile: device,
+          tenant_id:     tenantId,
+        })
         .select("id").single();
 
       const { data: render } = await supabase.from("video_renders")
-        .insert({ video_job_id: jobId, variant_id: variant?.id ?? null, status: "completed", raw_video_path: rawVideoPath, final_video_path: outputPath, manifest_json: manifest, naturalness_score: 85.0, duration_seconds: Math.round((Date.now() - startedAt) / 1000), language: payload.locale ?? "en", device_profile: device })
-        .select("id").single();
+        .insert({
+          video_job_id:     jobId,
+          variant_id:       variant?.id ?? null,
+          status:           "completed",
+          raw_video_path:   rawVideoPath,
+          final_video_path: outputPath,
+          manifest_json:    manifest,
+          naturalness_score: 85.0,
+          duration_seconds: Math.round((Date.now() - startedAt) / 1000),
+          language:         payload.locale ?? "en",
+          device_profile:   device,
+          tenant_id:        tenantId,
+        })
+        .select("id, access_token").single();
 
-      const renderId = render?.id;
+      const renderId    = render?.id;
+      const accessToken = render?.access_token;
+      if (!firstRenderId && renderId) {
+        firstRenderId    = renderId;
+        firstAccessToken = accessToken;
+      }
+
       if (renderId && process.env.DEMOFORGE_VIDEO_UPLOAD !== "false") {
         try {
           const objectKey = `renders/${jobId}/${renderId}.mp4`;
@@ -314,15 +467,35 @@ async function processJob(payload) {
           await supabase.from("video_renders").update({ storage_bucket: bucket, storage_object_key: key, cdn_url: cdnUrl, retention_until: retentionUntil }).eq("id", renderId);
           console.log(`[worker] uploaded render ${renderId} → ${cdnUrl}`);
         } catch (uploadErr) {
-          console.error(`[worker] upload failed:`, uploadErr.message);
+          console.error("[worker] upload failed:", uploadErr.message);
           await logOp("video_storage_upload", "error", sessionId, payload.correlationId, uploadErr.message, {});
         }
       }
 
       for (const hotspot of manifest.hotspots) {
-        await supabase.from("video_hotspots").insert({ render_id: renderId ?? null, start_seconds: hotspot.startSeconds, end_seconds: hotspot.endSeconds, label: hotspot.label, target_url: hotspot.targetUrl, context_payload: hotspot.contextPayload ?? null });
+        await supabase.from("video_hotspots").insert({
+          render_id:       renderId ?? null,
+          start_seconds:   hotspot.startSeconds,
+          end_seconds:     hotspot.endSeconds,
+          label:           hotspot.label,
+          target_url:      hotspot.targetUrl,
+          context_payload: hotspot.contextPayload ?? null,
+        });
       }
     }
+  }
+
+  // 6. Increment tenant video usage
+  if (tenantId) {
+    await supabase.rpc("increment_tenant_videos_used", { p_tenant_id: tenantId }).catch(async () => {
+      const { data: t } = await supabase.from("tenants").select("videos_used").eq("id", tenantId).single();
+      if (t) await supabase.from("tenants").update({ videos_used: (t.videos_used ?? 0) + 1 }).eq("id", tenantId);
+    });
+  }
+
+  // 7. Send video-ready email to prospect
+  if (firstRenderId && firstAccessToken) {
+    await sendVideoReadyNotification(firstRenderId, sessionId, tenantId, firstAccessToken);
   }
 
   await supabase.from("video_jobs").update({ status: "succeeded", updated_at: new Date().toISOString() }).eq("id", jobId);
@@ -381,4 +554,4 @@ if (process.env.CRUCIBLE_SIM_BASE_URL) {
     .catch(() => console.warn("[startup] Crucible unreachable — using default behavior"));
 }
 
-console.log("[video-pipeline] worker started");
+console.log("[video-pipeline] worker started (narration: ElevenLabs, scripts: LLM-generated)");

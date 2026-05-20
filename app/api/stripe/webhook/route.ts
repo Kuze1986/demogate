@@ -12,6 +12,17 @@ import { createServiceSupabaseClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
+interface PlanUpdate { plan: string; videosLimit: number; }
+
+function resolvePlanFromPriceId(priceId: string | null): PlanUpdate | null {
+  if (!priceId) return null;
+  const proPriceId = process.env.STRIPE_PRICE_SUBSCRIPTION_PRO;
+  const enterprisePriceId = process.env.STRIPE_PRICE_SUBSCRIPTION_ENTERPRISE;
+  if (proPriceId && priceId === proPriceId)         return { plan: "pro",        videosLimit: 100 };
+  if (enterprisePriceId && priceId === enterprisePriceId) return { plan: "enterprise", videosLimit: -1 };
+  return null;
+}
+
 async function wasEventAlreadyProcessed(
   supabase: ReturnType<typeof createServiceSupabaseClient>,
   eventId: string
@@ -154,6 +165,20 @@ export async function POST(request: Request) {
           });
         }
 
+        // Sync plan + quota limit to tenant
+        if (tenantId && session.mode === "subscription" && session.subscription) {
+          const subId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+          const sub = await stripe.subscriptions.retrieve(subId);
+          const priceId = sub.items.data[0]?.price?.id ?? null;
+          const planUpdate = resolvePlanFromPriceId(priceId);
+          if (planUpdate) {
+            await supabase
+              .from("tenants")
+              .update({ plan: planUpdate.plan, videos_limit: planUpdate.videosLimit })
+              .eq("id", tenantId);
+          }
+        }
+
         await logSystemEvent({
           function_name: "stripe.webhook",
           status: "success",
@@ -231,6 +256,22 @@ export async function POST(request: Request) {
           currency: inv.currency ?? null,
           status: inv.status ?? null,
         });
+
+        // Reset videos_used at the start of each new billing period
+        if (inv.billing_reason === "subscription_cycle") {
+          const { data: bc } = await supabase
+            .from("billing_customers")
+            .select("tenant_id")
+            .eq("id", existing.id)
+            .single();
+          if (bc?.tenant_id) {
+            await supabase
+              .from("tenants")
+              .update({ videos_used: 0 })
+              .eq("id", bc.tenant_id as string);
+          }
+        }
+
         await logSystemEvent({
           function_name: "stripe.webhook",
           status: "success",

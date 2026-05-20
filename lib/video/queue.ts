@@ -33,6 +33,19 @@ export async function enqueueVideoJob(input: EnqueueVideoJobInput): Promise<{
   correlationId: string;
 }> {
   const supabase = createServiceSupabaseClient();
+
+  // Quota guard — check before inserting the job row
+  if (input.tenantId) {
+    const { data: tenant } = await supabase
+      .from("tenants")
+      .select("videos_used,videos_limit")
+      .eq("id", input.tenantId)
+      .single();
+    if (tenant && tenant.videos_limit !== -1 && (tenant.videos_used ?? 0) >= (tenant.videos_limit ?? 0)) {
+      throw new Error(`QUOTA_EXCEEDED: tenant ${input.tenantId} has used ${tenant.videos_used}/${tenant.videos_limit} videos`);
+    }
+  }
+
   const correlationId = input.correlationId ?? randomUUID();
   const nowIso = new Date().toISOString();
   const skipExpensive = process.env.VIDEO_SKIP_EXPENSIVE_VARIANTS === "true";
@@ -48,16 +61,19 @@ export async function enqueueVideoJob(input: EnqueueVideoJobInput): Promise<{
   const { data: inserted, error: insErr } = await supabase
     .from("video_jobs")
     .insert({
-      parent_session_id: input.sessionId,
-      prospect_id: input.prospectId ?? null,
-      triggered_by: input.triggeredBy,
-      status: VIDEO_JOB_STATUS.queued,
-      priority: input.priority ?? 100,
-      target_variants: targetVariants,
-      retries: 0,
-      max_retries: VIDEO_GUARDRAILS.defaultMaxRetries,
+      parent_session_id:  input.sessionId,
+      prospect_id:        input.prospectId ?? null,
+      triggered_by:       input.triggeredBy,
+      status:             VIDEO_JOB_STATUS.queued,
+      priority:           input.priority ?? 100,
+      target_variants:    targetVariants,
+      retries:            0,
+      max_retries:        VIDEO_GUARDRAILS.defaultMaxRetries,
       max_runtime_seconds: VIDEO_GUARDRAILS.defaultMaxRuntimeSeconds,
-      correlation_id: correlationId,
+      correlation_id:     correlationId,
+      tenant_id:          input.tenantId ?? null,
+      script_template_id: input.scriptTemplateId ?? null,
+      voice_id:           input.voiceId ?? null,
     })
     .select("id")
     .single();

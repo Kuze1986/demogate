@@ -56,6 +56,10 @@ export interface EnqueueVideoJobInput {
   locale?: string;
   deviceProfiles?: VideoDeviceProfile[];
   correlationId?: string;
+  /** Self-service SaaS fields */
+  tenantId?: string | null;
+  scriptTemplateId?: string | null;
+  voiceId?: string | null;
 }
 
 export interface VideoQueuePayload extends EnqueueVideoJobInput {

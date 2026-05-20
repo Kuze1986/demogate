@@ -47,6 +47,19 @@ export async function canAccessAdminPanel(
   return memberships.some((m) => ADMIN_ROLES.includes(m.roleKey as (typeof ADMIN_ROLES)[number]));
 }
 
+export async function canAccessDashboard(
+  supabase: DemoforgeClient,
+  user: { id: string }
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("tenant_memberships")
+    .select("id")
+    .eq("user_id", user.id)
+    .limit(1);
+  if (error) return false;
+  return (data ?? []).length > 0;
+}
+
 export async function requireBillingAdminForTenant(
   supabase: DemoforgeClient,
   userId: string,
