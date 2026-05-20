@@ -109,7 +109,7 @@ export async function POST(
       sessionId: session.id as string,
       prospectId,
       triggeredBy: "intake",
-      variants: ["standard"],
+      variants: ["default"],
       tenantId: tenant.id as string,
       scriptTemplateId: template?.id ?? null,
       voiceId: (template as { voice_id?: string } | null)?.voice_id ?? (tenant.elevenlabs_voice_id as string | null) ?? null,
