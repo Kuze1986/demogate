@@ -276,11 +276,23 @@ async function synthesizeNarration(narrationCues, voiceId, narrationPath) {
 
 // ── FFmpeg post-process ───────────────────────────────────────────────────────
 
+// Lower-third watermark burned into every rendered MP4.
+// Appears bottom-right, white text with drop shadow for legibility on any background.
+const WATERMARK_FILTER =
+  "drawtext=text=Made with DemoForge | demoforge.bioloopnexus.com" +
+  ":fontcolor=white@0.75" +
+  ":fontsize=13" +
+  ":x=w-tw-14" +
+  ":y=h-th-14" +
+  ":shadowcolor=black@0.55" +
+  ":shadowx=1" +
+  ":shadowy=1";
+
 async function runFfmpeg(rawVideoPath, narrationPath, outputPath) {
   const hasAudio = existsSync(narrationPath) && statSync(narrationPath).size > 0;
   const args = hasAudio
-    ? ["-i", rawVideoPath, "-i", narrationPath, "-c:v", "libx264", "-preset", "medium", "-shortest", "-y", outputPath]
-    : ["-i", rawVideoPath, "-c:v", "libx264", "-preset", "medium", "-an", "-y", outputPath];
+    ? ["-i", rawVideoPath, "-i", narrationPath, "-vf", WATERMARK_FILTER, "-c:v", "libx264", "-preset", "medium", "-shortest", "-y", outputPath]
+    : ["-i", rawVideoPath, "-vf", WATERMARK_FILTER, "-c:v", "libx264", "-preset", "medium", "-an", "-y", outputPath];
 
   await new Promise((resolve, reject) => {
     const proc = spawn("ffmpeg", args, { stdio: "inherit" });

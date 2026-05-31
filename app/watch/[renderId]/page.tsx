@@ -189,6 +189,18 @@ function WatchPageInner() {
           </div>
         </div>
       </main>
+
+      {/* DemoForge credit */}
+      <footer className="py-5 text-center border-t border-gray-900">
+        <a
+          href="https://demoforge.bioloopnexus.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-gray-600 transition-colors hover:text-gray-400"
+        >
+          Made with DemoForge
+        </a>
+      </footer>
     </div>
   );
 }
