@@ -4,7 +4,17 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { emitLandingEvent } from "./useLandingEvent";
 
-const capabilities = [
+export type LandingCapability = { title: string; body: string };
+
+export type LandingShowcaseProps = {
+  eyebrow?: string;
+  headline?: string;
+  subhead?: string;
+  primaryCta?: string;
+  capabilities?: LandingCapability[];
+};
+
+const DEFAULT_CAPABILITIES: LandingCapability[] = [
   {
     title: "Adaptive Demo Routing",
     body: "Route each prospect into the right journey automatically.",
@@ -23,31 +33,37 @@ const capabilities = [
   },
 ];
 
-export function LandingShowcase() {
+export function LandingShowcase({
+  eyebrow = "Premium Suite",
+  headline = "DEMOFORGE 2.0:\nTHE ERA OF AUTONOMOUS,\nBEHAVIOR-AWARE DEMOS.",
+  subhead = "Meet Kuze AI. It watches, routes, and personalizes every journey to maximize engagement.",
+  primaryCta = "Start your personalized demo track",
+  capabilities = DEFAULT_CAPABILITIES,
+}: LandingShowcaseProps) {
+  const headlineLines = headline.split("\n").filter(Boolean);
+
   return (
     <section className="px-4 pb-16 pt-8 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-2">
         <div className="rounded-3xl border border-[color:var(--panel-border)] bg-[radial-gradient(circle_at_30%_20%,rgba(44,247,223,0.2),rgba(0,13,46,0.85))] p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[color:var(--accent)]">
-            Premium Suite
+            {eyebrow}
           </p>
           <h1 className="mt-4 text-4xl font-semibold leading-tight">
-            DEMOFORGE 2.0:
-            <br />
-            THE ERA OF AUTONOMOUS,
-            <br />
-            BEHAVIOR-AWARE DEMOS.
+            {headlineLines.map((line, i) => (
+              <span key={`${line}-${i}`}>
+                {line}
+                {i < headlineLines.length - 1 ? <br /> : null}
+              </span>
+            ))}
           </h1>
-          <p className="mt-4 max-w-xl text-sm text-zinc-300">
-            Meet Kuze AI. It watches, routes, and personalizes every journey to maximize
-            engagement.
-          </p>
+          <p className="mt-4 max-w-xl text-sm text-zinc-300">{subhead}</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/demo"
               onClick={() => void emitLandingEvent("landing_cta_demo", { placement: "showcase_primary" })}
             >
-              <Button>Start your personalized demo track</Button>
+              <Button>{primaryCta}</Button>
             </Link>
             <Link
               href="/admin/login"
@@ -111,4 +127,3 @@ export function LandingShowcase() {
     </section>
   );
 }
-

@@ -17,9 +17,11 @@ const STEPS = 4;
 export function IntakeForm({
   initialUtm = {},
   adminMode = false,
+  productCards = DEMO_PRODUCT_CARDS,
 }: {
   initialUtm?: Record<string, string>;
   adminMode?: boolean;
+  productCards?: typeof DEMO_PRODUCT_CARDS;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -259,7 +261,7 @@ export function IntakeForm({
             What are you most interested in?
           </p>
           <div className="grid gap-2 sm:grid-cols-2">
-            {DEMO_PRODUCT_CARDS.map((c) => {
+            {productCards.map((c) => {
               const selected = productInterest.includes(c.id);
               return (
                 <button
