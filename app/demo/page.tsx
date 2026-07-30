@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { IntakeForm } from "@/components/intake/IntakeForm";
+import { getEnrichedDemoProductCards } from "@/lib/vantage/enrich-product-cards";
 
 export default async function DemoIntakePage({
   searchParams,
@@ -30,6 +31,7 @@ export default async function DemoIntakePage({
     ...(utm_content ? { utm_content } : {}),
   };
   const isAdminMode = admin_mode === "1";
+  const productCards = await getEnrichedDemoProductCards();
 
   return (
     <div className="flex min-h-full flex-col items-center px-4 py-12">
@@ -44,7 +46,7 @@ export default async function DemoIntakePage({
         <p className="text-xs uppercase tracking-[0.24em] soft-muted">Kuze Guided Demo</p>
         <h1 className="text-3xl font-semibold">Build your personalized walkthrough</h1>
       </div>
-      <IntakeForm initialUtm={initialUtm} adminMode={isAdminMode} />
+      <IntakeForm initialUtm={initialUtm} adminMode={isAdminMode} productCards={productCards} />
     </div>
   );
 }
